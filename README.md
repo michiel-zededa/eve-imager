@@ -12,11 +12,14 @@ EVE-Imager downloads EVE OS releases directly from GitHub, lets you configure de
 - **Cascading selection** — choose Version → Architecture → Hypervisor → Platform; only combinations that actually have installer assets are shown
 - **Raw and ISO support** — prefers `.installer.raw` images; falls back to `.installer.iso` when only an ISO is available for a combination
 - **Device configuration** — optionally pre-configure the device before writing:
-  - Controller URL (e.g. `zedcloud.example.zededa.net`)
+  - Controller URL and custom CA certificate
   - Network mode: DHCP or static IP (address, gateway, DNS)
   - HTTP/HTTPS proxy
   - Onboarding certificate and key
-  - Device serial number
+  - Device serial number (soft serial)
+  - SSH public key for debug console access
+  - Target install disk and separate `/persist` disk
+  - Auto-reboot after installation
 - **Local image support** — bypass the GitHub release browser and write a locally downloaded `.raw` file instead
 - **Write + verify** — streams the download directly to the USB device and verifies the written data afterwards
 - **5-step wizard** — Version → Storage → Configuration → Write → Done
@@ -76,7 +79,7 @@ Build with CMake + Qt 6 via the Qt Online Installer. Run as Administrator (raw d
 
 2. **Storage** — Select the target USB drive. Double-check the device name and size before continuing.
 
-3. **Configuration** _(optional)_ — Enter a controller URL and any network/certificate settings you want pre-baked into the image. Leave blank to write a vanilla image.
+3. **Configuration** _(optional)_ — Configure any combination of the settings below. Leave everything blank to write a vanilla image and configure the device through the controller later.
 
 4. **Write** — Review the summary and click **Write**. EVE-Imager downloads the image (if not using a local file), streams it to the USB drive, and verifies the result.
 
@@ -102,14 +105,40 @@ EVE OS publishes installer images for:
 
 When you fill in the Configuration step, EVE-Imager writes the following files to the `CONFIG` FAT partition on the USB drive before ejecting:
 
+### Controller
+
 | File | Description |
 |---|---|
-| `server` | Controller URL (e.g. `zedcloud.example.zededa.net`) |
-| `network.conf` | Static IP settings (omitted if DHCP) |
-| `proxy.conf` | Proxy URL (omitted if empty) |
-| `onboard.cert.pem` | Onboarding certificate |
-| `onboard.key.pem` | Onboarding private key |
-| `soft_serial` | Device serial number override |
+| `server` | Controller hostname, e.g. `zedcloud.example.zededa.net` |
+| `root-certificate.pem` | CA certificate used to verify TLS connections to the controller. Required for self-hosted or private controller deployments. |
+
+### Networking
+
+| File | Description |
+|---|---|
+| `DevicePortConfig/override.json` | Network port configuration. Written when static IP or a proxy is configured; omitted for plain DHCP. |
+
+### Device identity
+
+| File | Description |
+|---|---|
+| `onboard.cert.pem` | Onboarding certificate — must be pre-registered in the controller. |
+| `onboard.key.pem` | Matching onboarding private key. |
+| `soft_serial` | Software-defined serial number sent to the controller at registration. Used to pre-provision or auto-approve a device. |
+
+### SSH access
+
+| File | Description |
+|---|---|
+| `authorized_keys` | SSH public key (OpenSSH format) for debug console access on the device. |
+
+### Installation (written to `grub.cfg`)
+
+| Kernel parameter | Description |
+|---|---|
+| `eve_install_disk=<disk>` | Force EVE to install onto a specific disk, e.g. `nvme0n1`. Useful on servers with multiple drives. |
+| `eve_persist_disk=<disk>` | Put the `/persist` partition on a separate disk, e.g. `sda`. |
+| `eve_reboot_after_install` | Automatically reboot when installation completes. |
 
 ---
 
