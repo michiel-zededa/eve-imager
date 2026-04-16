@@ -21,7 +21,7 @@ WizardStepBase {
     required property var wizardContainer
 
     title: qsTr("Device configuration")
-    subtitle: qsTr("All fields are optional — settings are written into the EVE OS config partition before flashing.")
+    subtitle: qsTr("All settings are optional. Anything left blank will use the EVE OS defaults. Filled-in values are written to the config partition on the USB drive.")
 
     showBackButton: true
     showNextButton: true
@@ -73,7 +73,7 @@ WizardStepBase {
                             ImTextField {
                                 id: controllerUrlField
                                 Layout.fillWidth: true
-                                placeholderText: qsTr("e.g. zedcloud.zededa.net")
+                                placeholderText: qsTr("e.g. zedcloud.zededa.net  (optional)")
                                 text: root.wizardContainer.eveConfig.controllerUrl
                                 inputMethodHints: Qt.ImhNoPredictiveText | Qt.ImhUrlCharactersOnly
                                 onTextChanged: root.setCfg("controllerUrl", text)
@@ -205,6 +205,11 @@ WizardStepBase {
                                 onTextChanged: root.setCfg("proxyUrl", text)
                             }
                         }
+
+                        WizardDescriptionText {
+                            text: qsTr("Leave as DHCP if you have no static IP or proxy requirements.")
+                            Layout.fillWidth: true
+                        }
                     }
                 }
 
@@ -264,7 +269,7 @@ WizardStepBase {
                             WizardFormLabel { text: qsTr("Device serial"); Layout.preferredWidth: Style.scaled(140) }
                             ImTextField {
                                 Layout.fillWidth: true
-                                placeholderText: qsTr("Soft serial number  (optional)")
+                                placeholderText: qsTr("Soft serial number  (optional, auto-generated if blank)")
                                 text: root.wizardContainer.eveConfig.deviceSerial
                                 onTextChanged: root.setCfg("deviceSerial", text)
                             }
@@ -361,7 +366,7 @@ WizardStepBase {
                             }
                             ImTextField {
                                 Layout.fillWidth: true
-                                placeholderText: qsTr("e.g. nvme0n1  (optional, default: auto)")
+                                placeholderText: qsTr("e.g. nvme0n1  (optional, auto-detected if blank)")
                                 text: root.wizardContainer.eveConfig.installDisk
                                 inputMethodHints: Qt.ImhNoPredictiveText
                                 onTextChanged: root.setCfg("installDisk", text)
@@ -377,7 +382,7 @@ WizardStepBase {
                             }
                             ImTextField {
                                 Layout.fillWidth: true
-                                placeholderText: qsTr("e.g. sda  (optional, defaults to same as install disk)")
+                                placeholderText: qsTr("e.g. sda  (optional, same disk as EVE if blank)")
                                 text: root.wizardContainer.eveConfig.persistDisk
                                 inputMethodHints: Qt.ImhNoPredictiveText
                                 onTextChanged: root.setCfg("persistDisk", text)

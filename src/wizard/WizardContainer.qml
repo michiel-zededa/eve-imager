@@ -74,6 +74,23 @@ Item {
     // ── Selections (displayed in WritingStep summary) ─────────────────────
     property string selectedOsName: ""        // e.g. "EVE OS 12.5.0 amd64/kvm/generic"
     property string selectedStorageName: ""
+    property string selectedDeviceName: selectedStorageName  // alias for DoneStep
+
+    // ── Completion snapshot (used by DoneStep — all false for EVE imager) ──
+    property var completionSnapshot: ({
+        customizationSupported: false,
+        hostnameConfigured: false,
+        localeConfigured: false,
+        userConfigured: false,
+        wifiConfigured: false,
+        sshEnabled: false,
+        piConnectEnabled: false,
+        ifI2cEnabled: false,
+        ifSpiEnabled: false,
+        if1WireEnabled: false,
+        ifSerial: "",
+        featUsbGadgetEnabled: false
+    })
 
     // ── EVE version / image selection ─────────────────────────────────────
     property string eveVersion: ""            // e.g. "12.5.0"
@@ -192,6 +209,14 @@ Item {
         invalidateStepsFrom(stepStorageSelection)
         selectedStorageName = ""
         eveConfigured = false
+    }
+
+    // Called by DoneStep "Write Another" button — go back to storage selection,
+    // skip customization, and jump straight to writing after drive is picked.
+    function resetToWriteStep() {
+        writeAnotherMode = true
+        markStepPermissible(stepStorageSelection)
+        jumpToStep(stepStorageSelection)
     }
 
     // ── Step component lookup ─────────────────────────────────────────────
