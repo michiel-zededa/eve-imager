@@ -43,7 +43,7 @@ Item {
     readonly property var stepNames: [
         qsTr("Version"),
         qsTr("Storage"),
-        qsTr("Configuration"),
+        qsTr("Configuration (optional)"),
         qsTr("Write"),
         qsTr("Done")
     ]

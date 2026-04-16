@@ -20,8 +20,8 @@ WizardStepBase {
     required property ImageWriter imageWriter
     required property var wizardContainer
 
-    title: qsTr("Device configuration")
-    subtitle: qsTr("All settings are optional. Anything left blank will use the EVE OS defaults. Filled-in values are written to the config partition on the USB drive.")
+    title: qsTr("Device configuration (optional)")
+    subtitle: qsTr("Everything on this page is optional — skip it entirely to write a plain EVE OS image. Any values you fill in will be written to the config partition on the USB drive before it is ejected.")
 
     showBackButton: true
     showNextButton: true
@@ -46,6 +46,28 @@ WizardStepBase {
                 id: formColumn
                 width: parent.width
                 spacing: Style.spacingMedium
+
+                // ── Skip banner ───────────────────────────────────────────────
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.topMargin: Style.spacingSmall
+                    color: Style.zededaLightBlue
+                    radius: Style.sectionBorderRadius
+                    height: skipBannerText.implicitHeight + Style.spacingSmall * 2
+
+                    Text {
+                        id: skipBannerText
+                        anchors {
+                            left: parent.left; right: parent.right
+                            top: parent.top; margins: Style.spacingSmall
+                        }
+                        text: qsTr("All fields below are optional. Click Next to skip and write a plain image.")
+                        font.family: Style.fontFamily
+                        font.pointSize: Style.fontSizeDescription
+                        color: Style.zededaNavy
+                        wrapMode: Text.WordWrap
+                    }
+                }
 
                 // ── Controller ────────────────────────────────────────────────
                 Text {
