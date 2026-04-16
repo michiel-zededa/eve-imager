@@ -47,6 +47,7 @@ DeviceWrapperFatPartition::DeviceWrapperFatPartition(DeviceWrapper *dw, quint64 
 
     dataSectors = totalSectors - (bpb.fat16.BPB_RsvdSecCnt + (bpb.fat16.BPB_NumFATs * _fatSize) + _fat16_rootDirSectors);
     countOfClusters = dataSectors / bpb.fat16.BPB_SecPerClus;
+    _countOfClusters = countOfClusters;
     _bytesPerCluster = bpb.fat16.BPB_SecPerClus * _bytesPerSector;
     _fat16_firstRootDirSector = bpb.fat16.BPB_RsvdSecCnt + (bpb.fat16.BPB_NumFATs * bpb.fat16.BPB_FATSz16);
     _fat32_firstRootDirCluster = bpb.fat32.BPB_RootClus;
@@ -60,8 +61,6 @@ DeviceWrapperFatPartition::DeviceWrapperFatPartition(DeviceWrapper *dw, quint64 
     else
         _type = FAT32;
 
-    if (_type == FAT12)
-        throw std::runtime_error("FAT12 file system not supported");
     if (_type == EXFAT)
         throw std::runtime_error("exFAT file system not supported");
     if (_bytesPerSector % 4)
@@ -73,7 +72,7 @@ DeviceWrapperFatPartition::DeviceWrapperFatPartition(DeviceWrapper *dw, quint64 
         _fatStartOffset.append(_firstFatStartOffset + (i * _fatSize * _bytesPerSector));
     }
 
-    if (_type == FAT16)
+    if (_type == FAT12 || _type == FAT16)
     {
         _fat32_fsinfoSector = 0;
         _clusterOffset = (_fat16_firstRootDirSector+_fat16_rootDirSectors) * _bytesPerSector;
@@ -82,6 +81,41 @@ DeviceWrapperFatPartition::DeviceWrapperFatPartition(DeviceWrapper *dw, quint64 
     {
         _fat32_fsinfoSector = bpb.fat32.BPB_FSInfo;
         _clusterOffset = _firstFatStartOffset + (bpb.fat16.BPB_NumFATs * _fatSize * _bytesPerSector);
+    }
+}
+
+uint16_t DeviceWrapperFatPartition::getFAT12(uint32_t cluster)
+{
+    /* FAT12: entries are 12 bits, packed 2 per 3 bytes.
+     * Byte offset for cluster N = N + N/2 */
+    quint64 offset = cluster + (cluster / 2);
+    uint8_t bytes[2];
+    seek(_firstFatStartOffset + offset);
+    read((char *)bytes, 2);
+    if (cluster & 1)
+        return (((uint16_t)bytes[1] << 4) | (bytes[0] >> 4)) & 0xFFF;
+    else
+        return (((uint16_t)(bytes[1] & 0x0F) << 8) | bytes[0]) & 0xFFF;
+}
+
+void DeviceWrapperFatPartition::setFAT12(uint32_t cluster, uint16_t value)
+{
+    quint64 offset = cluster + (cluster / 2);
+    uint8_t bytes[2];
+
+    for (auto fatStart : std::as_const(_fatStartOffset))
+    {
+        seek(fatStart + offset);
+        read((char *)bytes, 2);
+        if (cluster & 1) {
+            bytes[0] = (bytes[0] & 0x0F) | ((value & 0x0F) << 4);
+            bytes[1] = (value >> 4) & 0xFF;
+        } else {
+            bytes[0] = value & 0xFF;
+            bytes[1] = (bytes[1] & 0xF0) | ((value >> 8) & 0x0F);
+        }
+        seek(fatStart + offset);
+        write((char *)bytes, 2);
     }
 }
 
@@ -94,9 +128,23 @@ uint32_t DeviceWrapperFatPartition::allocateCluster()
     uint16_t *f16 = (uint16_t *) &sector;
     uint32_t *f32 = (uint32_t *) &sector;
 
+    if (_type == FAT12)
+    {
+        /* FAT12: scan clusters 2..countOfClusters+1 using getFAT12() */
+        for (uint32_t i = 2; i < _countOfClusters + 2; i++)
+        {
+            if (getFAT12(i) == 0)
+            {
+                setFAT12(i, 0xFFF);   /* EOF marker */
+                return i;
+            }
+        }
+        throw std::runtime_error("Out of disk space on FAT12 partition");
+    }
+
     seek(_firstFatStartOffset);
 
-    for (int i = 0; i < _fatSize; i++)
+    for (int i = 0; i < (int)_fatSize; i++)
     {
         read(sector, sizeof(sector));
 
@@ -135,7 +183,9 @@ uint32_t DeviceWrapperFatPartition::allocateCluster(uint32_t previousCluster)
 
     if (previousCluster)
     {
-        if (_type == FAT16)
+        if (_type == FAT12)
+            setFAT12(previousCluster, (uint16_t)newCluster);
+        else if (_type == FAT16)
             setFAT16(previousCluster, newCluster);
         else
             setFAT32(previousCluster, newCluster);
@@ -174,7 +224,9 @@ void DeviceWrapperFatPartition::setFAT32(uint32_t cluster, uint32_t value)
 
 void DeviceWrapperFatPartition::setFAT(uint32_t cluster, uint32_t value)
 {
-    if (_type == FAT16)
+    if (_type == FAT12)
+        setFAT12(cluster, (uint16_t)value);
+    else if (_type == FAT16)
         setFAT16(cluster, value);
     else
         setFAT32(cluster, value);
@@ -182,7 +234,9 @@ void DeviceWrapperFatPartition::setFAT(uint32_t cluster, uint32_t value)
 
 uint32_t DeviceWrapperFatPartition::getFAT(uint32_t cluster)
 {
-    if (_type == FAT16)
+    if (_type == FAT12)
+        return getFAT12(cluster);
+    else if (_type == FAT16)
     {
         uint16_t result;
         seek(_firstFatStartOffset + cluster * 2);
@@ -205,7 +259,8 @@ QList<uint32_t> DeviceWrapperFatPartition::getClusterChain(uint32_t firstCluster
 
     while (true)
     {
-        if ( (_type == FAT16 && cluster > 0xFFF7)
+        if ( (_type == FAT12 && cluster > 0xFF7)
+             || (_type == FAT16 && cluster > 0xFFF7)
              || (_type == FAT32 && cluster > 0xFFFFFF7))
         {
             /* Reached EOF */
@@ -1327,7 +1382,7 @@ void DeviceWrapperFatPartition::writeDirEntryAtCurrentPos(struct dir_entry *dirE
 void DeviceWrapperFatPartition::openDir()
 {
     /* Seek to start of root directory */
-    if (_type == FAT16)
+    if (_type == FAT12 || _type == FAT16)
     {
         seek(_fat16_firstRootDirSector * _bytesPerSector);
     }

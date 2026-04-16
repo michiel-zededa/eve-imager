@@ -1,6 +1,6 @@
 /*
  * SPDX-License-Identifier: Apache-2.0
- * Copyright (C) 2025 Raspberry Pi Ltd
+ * Copyright (C) 2025 ZEDEDA, Inc.
  */
 
 pragma Singleton
@@ -26,77 +26,91 @@ Item {
     // Scale a base value by the text scaling factor, rounding to nearest int.
     function scaled(base) { return Math.round(base * textScale) }
 
-    // === COLORS ===
+    // === COLORS — ZEDEDA brand palette ===
     readonly property color mainBackgroundColor: "#ffffff"
-    readonly property color raspberryRed: "#ab1e3a"
+
+    // ZEDEDA primary navy — replaces raspberry red as the brand anchor color
+    readonly property color zededaNavy:  "#134468"
+    readonly property color zededaNavyDark: "#0d3050"   // hover / focus darker shade
+    readonly property color zededaOrange: "#FFA500"      // CTA accent (Write button)
+    readonly property color zededaLightBlue: "#d1eaff"   // subtle backgrounds / hover fill
+    readonly property color zededaCharcoal: "#32373c"    // secondary buttons
+
+    // Keep the alias so existing references to `raspberryRed` throughout QML still compile,
+    // but they now resolve to ZEDEDA navy.
+    readonly property color raspberryRed: zededaNavy
     readonly property color transparent: "transparent"
 
+    // Secondary / ghost button (outline style)
     readonly property color buttonBackgroundColor: mainBackgroundColor
-    readonly property color buttonForegroundColor: raspberryRed
-    readonly property color buttonFocusedBackgroundColor: "#d1dcfb"
-    readonly property color buttonHoveredBackgroundColor: "#f2f2f2"
+    readonly property color buttonForegroundColor: zededaNavy
+    readonly property color buttonFocusedBackgroundColor: zededaLightBlue
+    readonly property color buttonHoveredBackgroundColor: "#f0f4f8"
 
-    readonly property color button2BackgroundColor: raspberryRed
+    // Primary filled button (Next / Write)
+    readonly property color button2BackgroundColor: zededaNavy
     readonly property color button2ForegroundColor: mainBackgroundColor
-    // Focused: noticeably darker for strong state indication (keyboard focus)
-    readonly property color button2FocusedBackgroundColor: "#8f122c"
-    // Hovered: noticeably lighter to differentiate from base (≥4.5:1 contrast vs base)
-    readonly property color button2HoveredBackgroundColor: "#eac7ce"
-    // Hovered foreground should be Raspberry Red for ≥4.5:1 contrast on the light hover bg
-    readonly property color button2HoveredForegroundColor: raspberryRed
-    readonly property color raspberryRedHighlight: "#d64561"
+    readonly property color button2FocusedBackgroundColor: zededaNavyDark
+    readonly property color button2HoveredBackgroundColor: zededaLightBlue
+    readonly property color button2HoveredForegroundColor: zededaNavy
 
-    readonly property color titleBackgroundColor: "#f5f5f5"
-    readonly property color titleSeparatorColor: "#afafaf"
-    readonly property color popupBorderColor: "#dcdcdc"
+    // Orange accent for the primary write/action CTA
+    readonly property color ctaBackgroundColor: zededaOrange
+    readonly property color ctaForegroundColor: mainBackgroundColor
+    readonly property color ctaHoveredBackgroundColor: "#e69500"  // slightly darker orange
+
+    readonly property color titleBackgroundColor: "#f5f8fa"
+    readonly property color titleSeparatorColor: "#d8d8d8"
+    readonly property color popupBorderColor: "#d8d8d8"
 
     readonly property color listViewRowBackgroundColor: "#ffffff"
     readonly property color listViewHoverRowBackgroundColor: titleBackgroundColor
-    // Selection highlight color for OS/device lists
-    readonly property color listViewHighlightColor: "#BACCE7"
+    readonly property color listViewHighlightColor: zededaLightBlue
 
     // Utility translucent colors
     readonly property color translucentWhite10: Qt.rgba(255, 255, 255, 0.1)
     readonly property color translucentWhite30: Qt.rgba(255, 255, 255, 0.3)
 
-    // descriptions in list views
-    readonly property color textDescriptionColor: "#1a1a1a"
-    // Sidebar colors
-    readonly property color sidebarActiveBackgroundColor: raspberryRed
-    readonly property color sidebarTextOnActiveColor: "#FFFFFF"
-    readonly property color sidebarTextOnInactiveColor: raspberryRed
-    readonly property color sidebarTextDisabledColor: "#E0E0E0"
-    // Sidebar controls
+    readonly property color textDescriptionColor: "#4a4a4a"
+
+    // Sidebar
+    readonly property color sidebarActiveBackgroundColor: zededaNavy
+    readonly property color sidebarTextOnActiveColor: "#ffffff"
+    readonly property color sidebarTextOnInactiveColor: zededaNavy
+    readonly property color sidebarTextDisabledColor: "#a1a1a1"
     readonly property color sidebarControlBorderColor: "#767676"
     readonly property color sidebarBackgroundColour: mainBackgroundColor
-    readonly property color sidebarBorderColour: raspberryRed
+    readonly property color sidebarBorderColour: zededaNavy
 
-    // OS metadata
-    readonly property color textMetadataColor: "#646464"
-
-    // for the "device / OS / storage" titles
+    // Metadata / captions in list views
+    readonly property color textMetadataColor: "#a1a1a1"
     readonly property color subtitleColor: "#ffffff"
 
+    // Progress bar
     readonly property color progressBarTextColor: "white"
-    readonly property color progressBarVerifyForegroundColor: "#6cc04a"
-    readonly property color progressBarBackgroundColor: raspberryRed
-    // New: distinct colors for writing vs verification phases
-    readonly property color progressBarWritingForegroundColor: raspberryRed
+    readonly property color progressBarVerifyForegroundColor: "#2e7d32"   // green for verify phase
+    readonly property color progressBarBackgroundColor: zededaNavy
+    readonly property color progressBarWritingForegroundColor: zededaOrange
     readonly property color progressBarTrackColor: titleBackgroundColor
 
-    readonly property color lanbarBackgroundColor: "#ffffe3"
+    readonly property color lanbarBackgroundColor: "#fff9e6"
 
-    /// the check-boxes/radio-buttons have labels that might be disabled
-    readonly property color formLabelColor: "black"
-    readonly property color formLabelErrorColor: "red"
-    readonly property color formLabelDisabledColor: "grey"
-    // Active color for radio buttons, checkboxes, and switches
-    readonly property color formControlActiveColor: "#1955AE"
+    // Form controls
+    readonly property color formLabelColor: "#4a4a4a"
+    readonly property color formLabelErrorColor: "#c62828"
+    readonly property color formLabelDisabledColor: "#a1a1a1"
+    readonly property color formControlActiveColor: zededaNavy
 
     readonly property color embeddedModeInfoTextColor: "#ffffff"
 
-    // Focus/outline
-    readonly property color focusOutlineColor: "#0078d4"
+    // Status indicators
+    readonly property color statusSuccess: "#2e7d32"
+    readonly property color statusError:   "#c62828"
+    readonly property color statusWarning: zededaOrange
+    readonly property color statusInfo:    "#056094"
+
+    // Focus / outline
+    readonly property color focusOutlineColor: zededaNavy
     readonly property int focusOutlineWidth: 2
     readonly property int focusOutlineRadius: 4
     readonly property int focusOutlineMargin: -4

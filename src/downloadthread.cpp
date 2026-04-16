@@ -4,6 +4,7 @@
  */
 
 #include "downloadthread.h"
+#include "eveconfigurator.h"
 #include "aligned_buffer.h"
 #include "config.h"
 #include "devicewrapper.h"
@@ -1734,6 +1735,14 @@ void DownloadThread::_writeComplete()
             return;
         }
     }
+    else if (!_eveConfig.isEmpty())
+    {
+        if (!_applyEveConfig())
+        {
+            _closeFiles();
+            return;
+        }
+    }
 
     if (_firstBlock)
     {
@@ -2149,6 +2158,41 @@ void DownloadThread::setImageCustomisation(const QByteArray &config, const QByte
     _initFormat = initFormat;
     _advancedOptions = opts;
     qDebug() << "DownloadThread::setImageCustomisation - initFormat:" << initFormat << "cloudinit empty:" << cloudinit.isEmpty() << "cloudinitNetwork empty:" << cloudInitNetwork.isEmpty();
+}
+
+void DownloadThread::setEveConfig(const QVariantMap &config)
+{
+    _eveConfig = config;
+}
+
+bool DownloadThread::_applyEveConfig()
+{
+    emit preparationStatusUpdate(tr("Writing EVE OS configuration..."));
+    QElapsedTimer t;
+    t.start();
+
+    try {
+        DeviceWrapper dw(_file.get());
+
+        // Write the delayed first block (MBR/protective MBR) via DeviceWrapper
+        // so it is flushed last, exactly as _customizeImage() does.
+        if (_firstBlock) {
+            dw.pwrite(_firstBlock, _firstBlockSize, 0);
+            _bytesWritten += _firstBlockSize;
+            qFreeAligned(_firstBlock);
+            _firstBlock = nullptr;
+        }
+
+        EveConfigurator::apply(dw, _eveConfig);
+        dw.sync();
+    } catch (std::runtime_error &err) {
+        emit error(err.what());
+        return false;
+    }
+
+    qDebug() << "EveConfigurator: config written in" << t.elapsed() << "ms";
+    emit finalizing();
+    return true;
 }
 
 void DownloadThread::setDebugDirectIO(bool enabled)

@@ -1530,7 +1530,8 @@ void ImageWriter::startWrite()
     _thread->setUserAgent(QString("Mozilla/5.0 rpi-imager/%1").arg(staticVersion()).toUtf8());
     qDebug() << "startWrite: Passing to thread - initFormat:" << _initFormat << "cloudinit empty:" << _cloudinit.isEmpty() << "cloudinitNetwork empty:" << _cloudinitNetwork.isEmpty();
     _thread->setImageCustomisation(_config, _cmdline, _firstrun, _cloudinit, _cloudinitNetwork, _initFormat, _advancedOptions);
-    
+    _thread->setEveConfig(_eveConfig);
+
     // Pass debug options to the thread
     _thread->setDebugDirectIO(_debugDirectIO);
     _thread->setDebugPeriodicSync(_debugPeriodicSync);
@@ -3444,6 +3445,11 @@ bool ImageWriter::isSecureBootForcedByCliFlag() const
     return _forceSecureBootEnabled;
 }
 
+void ImageWriter::setEveConfig(const QVariantMap &config)
+{
+    _eveConfig = config;
+}
+
 void ImageWriter::setImageCustomisation(const QByteArray &config, const QByteArray &cmdline, const QByteArray &firstrun, const QByteArray &cloudinit, const QByteArray &cloudinitNetwork, const ImageOptions::AdvancedOptions opts, const QByteArray &initFormat)
 {
     _config = config;
@@ -4354,7 +4360,8 @@ void ImageWriter::_continueStartWriteAfterCacheVerification(bool cacheIsValid)
     _thread->setUserAgent(QString("Mozilla/5.0 rpi-imager/%1").arg(staticVersion()).toUtf8());
     qDebug() << "_continueStartWrite: Passing to thread - initFormat:" << _initFormat << "cloudinit empty:" << _cloudinit.isEmpty() << "cloudinitNetwork empty:" << _cloudinitNetwork.isEmpty();
     _thread->setImageCustomisation(_config, _cmdline, _firstrun, _cloudinit, _cloudinitNetwork, _initFormat, _advancedOptions);
-    
+    _thread->setEveConfig(_eveConfig);
+
     // Pass debug options to the thread
     _thread->setDebugDirectIO(_debugDirectIO);
     _thread->setDebugPeriodicSync(_debugPeriodicSync);

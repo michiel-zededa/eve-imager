@@ -282,6 +282,9 @@ public:
     Q_INVOKABLE QString getDebugCustomFastbootGadget() const;
     Q_INVOKABLE void setDebugCustomFastbootGadget(const QString &path);
 
+    // EVE OS config injection — called from QML before startWrite()
+    Q_INVOKABLE void setEveConfig(const QVariantMap &config);
+
     // Customisation API
     Q_INVOKABLE void applyCustomisationFromSettings(const QVariantMap &settings);  // Main entry: generates scripts from settings
     Q_INVOKABLE void setImageCustomisation(const QByteArray &config, const QByteArray &cmdline, const QByteArray &firstrun, const QByteArray &cloudinit, const QByteArray &cloudinitNetwork, const ImageOptions::AdvancedOptions opts = {}, const QByteArray &initFormat = {});  // Advanced: bypass generator with pre-made scripts
@@ -461,6 +464,7 @@ protected:
     QUrl _src, _repo;
     QString _dst, _parentCategory, _osName, _osReleaseDate, _currentLang, _currentLangcode, _currentKeyboard, _bmapUrl;
     QByteArray _expectedHash, _cmdline, _config, _firstrun, _cloudinit, _cloudinitNetwork, _initFormat;
+    QVariantMap _eveConfig;
     ImageOptions::AdvancedOptions _advancedOptions;
     quint64 _downloadLen, _extrLen, _devLen, _dlnow, _verifynow;
     DriveListModel _drivelist;

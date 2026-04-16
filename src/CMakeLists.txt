@@ -26,7 +26,7 @@ endif()
 
 set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "Which macOS architectures to build for")
 
-project(rpi-imager LANGUAGES CXX C)
+project(eve-imager LANGUAGES CXX C)
 
 find_package(Git QUIET)
 
@@ -237,7 +237,7 @@ set(SOURCES_BASE ${PLATFORM_SOURCES} "main.cpp"
     "devicewrapper.cpp" "devicewrapperblockcacheentry.cpp" "devicewrapperpartition.cpp" "devicewrapperfatpartition.cpp"
     "driveformatthread.cpp" "localfileextractthread.cpp" "downloadstatstelemetry.cpp" "dependencies/sha256crypt/sha256crypt.c" "cli.cpp"
     "disk_formatter.cpp" "file_operations.cpp" "cachemanager.cpp" "systemmemorymanager.cpp" "imageadvancedoptions.cpp"
-    "customization_generator.cpp" "platformhelper.cpp" "suspend_inhibitor.cpp" "secureboot.cpp" "asynccachewriter.cpp" "ringbuffer.cpp"
+    "customization_generator.cpp" "eveconfigurator.cpp" "evereleasefetcher.cpp" "platformhelper.cpp" "suspend_inhibitor.cpp" "secureboot.cpp" "asynccachewriter.cpp" "ringbuffer.cpp"
     "performancestats.cpp" "curlnetworkconfig.cpp" "curlfetcher.cpp" "writeprogresswatchdog.cpp")
 
 # Add GUI-specific sources only for non-CLI builds
@@ -329,7 +329,7 @@ set(SOURCES ${SOURCES} "${CMAKE_CURRENT_BINARY_DIR}/translations.qrc" ${QM_FILES
 # Generate timezone list from IANA data
 # To disable automatic timezone generation, set -DGENERATE_TIMEZONES_FROM_IANA=OFF
 # To update timezone data version, change TZDATA_VERSION below
-option(GENERATE_TIMEZONES_FROM_IANA "Generate timezone list from latest IANA data" ON)
+option(GENERATE_TIMEZONES_FROM_IANA "Generate timezone list from latest IANA data" OFF)
 
 if(GENERATE_TIMEZONES_FROM_IANA)
     set(TZDATA_VERSION "2025c") # Update this to get newer timezone data
@@ -348,7 +348,7 @@ if(GENERATE_TIMEZONES_FROM_IANA)
     list(APPEND SOURCES "${GENERATED_TZ_QRC}")
 endif()
 
-option(GENERATE_COUNTRIES_FROM_REGDB "Generate countries list from latest wireless-regdb" ON)
+option(GENERATE_COUNTRIES_FROM_REGDB "Generate countries list from latest wireless-regdb" OFF)
 
 if(GENERATE_COUNTRIES_FROM_REGDB)
     set(REGDB_URL "https://git.kernel.org/pub/scm/linux/kernel/git/wens/wireless-regdb.git/plain/db.txt")
@@ -364,7 +364,7 @@ if(GENERATE_COUNTRIES_FROM_REGDB)
     list(APPEND SOURCES "${GENERATED_COUNTRIES_QRC}")
 endif()
 
-option(GENERATE_CAPITAL_CITIES "Generate capital cities list from REST Countries API" ON)
+option(GENERATE_CAPITAL_CITIES "Generate capital cities list from REST Countries API" OFF)
 
 if(GENERATE_CAPITAL_CITIES)
     set(REST_COUNTRIES_URL "https://restcountries.com/v3.1/all?fields=name,capital,cca2,timezones")
@@ -473,7 +473,6 @@ if(NOT BUILD_CLI_ONLY)
         wizard/dialogs/AppOptionsDialog.qml
         wizard/dialogs/DebugOptionsDialog.qml
         wizard/dialogs/ConfirmOtpProgramDialog.qml
-        wizard/LanguageSelectionStep.qml
         qmlcomponents/BaseDialog.qml
         qmlcomponents/ImButton.qml
         qmlcomponents/ImButtonRed.qml
@@ -494,23 +493,14 @@ if(NOT BUILD_CLI_ONLY)
         qmlcomponents/OSSelectionListView.qml
         wizard/WizardStepBase.qml
         wizard/WizardContainer.qml
-        wizard/DeviceSelectionStep.qml
-        wizard/OSSelectionStep.qml
+        wizard/EveVersionStep.qml
+        wizard/EveCustomizationStep.qml
         wizard/StorageSelectionStep.qml
-        wizard/HostnameCustomizationStep.qml
-        wizard/IfAndFeaturesCustomizationStep.qml
-        wizard/LocaleCustomizationStep.qml
-        wizard/UserCustomizationStep.qml
-        wizard/WifiCustomizationStep.qml
-        wizard/RemoteAccessStep.qml
-        wizard/SecureBootCustomizationStep.qml
-        wizard/PiConnectCustomizationStep.qml
         wizard/WritingStep.qml
         wizard/DoneStep.qml
         wizard/components/WizardSectionContainer.qml
         wizard/components/WizardFormLabel.qml
         wizard/components/WizardDescriptionText.qml
-        wizard/components/SshKeyManager.qml
     )
 
     set_source_files_properties(Style.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
@@ -524,6 +514,7 @@ if(NOT BUILD_CLI_ONLY)
         urlfmt.cpp
         clipboardhelper.cpp
         platformhelper.cpp
+        evereleasefetcher.cpp
     )
 endif()
 

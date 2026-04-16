@@ -13,6 +13,7 @@
 #include <QString>
 #include <QThread>
 #include <QFile>
+#include <QVariantMap>
 #include <QElapsedTimer>
 #include <QFuture>
 #include <atomic>
@@ -124,6 +125,9 @@ public:
      * Enable image customization
      */
     void setImageCustomisation(const QByteArray &config, const QByteArray &cmdline, const QByteArray &firstrun, const QByteArray &cloudinit, const QByteArray &cloudinitNetwork, const QByteArray &initFormat, const ImageOptions::AdvancedOptions opts);
+
+    /* EVE OS device configuration injected into the CONFIG partition after writing */
+    void setEveConfig(const QVariantMap &config);
 
     /*
      * Debug options (set before starting the thread)
@@ -251,6 +255,7 @@ protected:
     void _closeFiles();
     QByteArray _fileGetContentsTrimmed(const QString &filename);
     bool _customizeImage();
+    bool _applyEveConfig();
     bool _createSecureBootFiles(class DeviceWrapperFatPartition *fat);
     void _periodicSync();
 
@@ -271,6 +276,7 @@ protected:
     std::uint64_t _lastFailureOffset;
     qint64 _sectorsStart;
     QByteArray _url, _useragent, _buf, _filename, _lastError, _expectedHash, _config, _cmdline, _firstrun, _cloudinit, _cloudinitNetwork, _initFormat;
+    QVariantMap _eveConfig;
     ImageOptions::AdvancedOptions _advancedOptions;
     char *_firstBlock;
     size_t _firstBlockSize;

@@ -568,19 +568,11 @@ int main(int argc, char *argv[])
     if (customQm.isEmpty())
     {
 #ifdef Q_OS_DARWIN
-        QString langcode = "en_GB";
-        CFArrayRef prefLangs = CFLocaleCopyPreferredLanguages();
-        if (CFArrayGetCount(prefLangs))
-        {
-            char buf[32] = {0};
-            CFStringRef strRef = (CFStringRef) CFArrayGetValueAtIndex(prefLangs, 0);
-            CFStringGetCString(strRef, buf, sizeof(buf), kCFStringEncodingUTF8);
-            langcode = buf;
-            langcode.replace('-', '_');
-            qDebug() << "OSX most preferred language:" << langcode;
-        }
-
-        CFRelease(prefLangs);
+        // EVE Imager: always use English regardless of macOS system language.
+        // The app ships no locale-specific translations, so following the system
+        // locale only causes Qt's own Dutch/German/etc. strings to appear mixed
+        // with the English UI strings.
+        QString langcode = "en_US";
         QLocale::setDefault(QLocale(langcode));
 #elif defined(Q_OS_WIN)
         // Use Windows API to get the actual UI language preference

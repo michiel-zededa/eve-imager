@@ -39,15 +39,10 @@ ApplicationWindow {
     property bool isOffline: imageWriter.isOsListUnavailable
     
     title: {
-        var baseTitle = qsTr("Raspberry Pi Imager %1").arg(imageWriter.constantVersion())
+        var baseTitle = qsTr("EVE OS Imager %1").arg(imageWriter.constantVersion())
         if (isOffline) {
             baseTitle += " — " + qsTr("Offline")
         }
-
-        if (customRepoHost.length > 0) {
-            baseTitle += " — " + qsTr("Using data from %1").arg(customRepoHost)
-        }
-
         return baseTitle
     }
 
@@ -110,21 +105,9 @@ ApplicationWindow {
             imageWriter: window.imageWriter
             optionsPopup: appOptionsDialog
             overlayRootRef: overlayRoot
-            // Show Language step if C++ requested it
-            showLanguageSelection: window.showLanguageSelection
-
             onWizardCompleted: {
-                // Reset to start of wizard or close application
+                // Reset to start of wizard
                 wizardContainer.currentStep = 0;
-            }
-            
-            onUpdatePopupRequested: function(updateUrl, version) {
-                if (!window.updatePopupShown) {
-                    window.updatePopupShown = true
-                    updatepopup.url = updateUrl
-                    updatepopup.version = version
-                    updatepopup.open()
-                }
             }
         }
     }

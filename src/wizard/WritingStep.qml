@@ -56,7 +56,10 @@ WizardStepBase {
         }
     }
     backButtonAccessibleDescription: qsTr("Return to previous customization step")
-    nextButtonEnabled: root.isWriting || root.isComplete || (!beginWriteDelay.running && imageWriter.readyToWrite())
+    // _srcReady is set true in Component.onCompleted after setSrc() — this makes the
+    // nextButtonEnabled binding re-evaluate once the image source is configured.
+    property bool _srcReady: false
+    nextButtonEnabled: root.isWriting || root.isComplete || (!beginWriteDelay.running && root._srcReady && imageWriter.readyToWrite())
     showBackButton: true
 
     readonly property bool isWriting: {
@@ -73,17 +76,8 @@ WizardStepBase {
     property int writeThroughputKBps: 0
     property string operationWarning: ""  // Non-fatal warning message (e.g., sync fallback)
     property bool isIndeterminateProgress: false  // True when we can't determine accurate progress (e.g., gz files >4GB)
-    readonly property bool anyCustomizationsApplied: (
-        wizardContainer.customizationSupported && (
-            wizardContainer.hostnameConfigured ||
-            wizardContainer.localeConfigured ||
-            wizardContainer.userConfigured ||
-            wizardContainer.wifiConfigured ||
-            wizardContainer.sshEnabled ||
-            wizardContainer.piConnectEnabled ||
-            wizardContainer.featUsbGadgetEnabled
-        )
-    )
+    // For EVE, customizations are always shown when the eveConfig has any non-empty field
+    readonly property bool anyCustomizationsApplied: false
 
     // Disable back while writing
     backButtonEnabled: !root.isWriting
@@ -130,32 +124,8 @@ WizardStepBase {
                 rowSpacing: Style.spacingSmall
 
                 Text {
-                    id: deviceLabel
-                    text: CommonStrings.device
-                    font.pointSize: Style.fontSizeDescription
-                    font.family: Style.fontFamily
-                    color: Style.formLabelColor
-                    Accessible.role: Accessible.StaticText
-                    Accessible.name: text + ": " + (wizardContainer.selectedDeviceName || CommonStrings.noDeviceSelected)
-                    Accessible.focusable: root.imageWriter ? root.imageWriter.isScreenReaderActive() : false
-                    focusPolicy: (root.imageWriter && root.imageWriter.isScreenReaderActive()) ? Qt.TabFocus : Qt.NoFocus
-                    activeFocusOnTab: root.imageWriter ? root.imageWriter.isScreenReaderActive() : false
-                }
-
-                MarqueeText {
-                    id: deviceValue
-                    text: wizardContainer.selectedDeviceName || CommonStrings.noDeviceSelected
-                    font.pointSize: Style.fontSizeDescription
-                    font.family: Style.fontFamilyBold
-                    font.bold: true
-                    color: Style.formLabelColor
-                    Layout.fillWidth: true
-                    Accessible.ignored: true  // Read as part of the label
-                }
-
-                Text {
                     id: osLabel
-                    text: qsTr("Operating system:")
+                    text: qsTr("EVE OS image:")
                     font.pointSize: Style.fontSizeDescription
                     font.family: Style.fontFamily
                     color: Style.formLabelColor
@@ -275,17 +245,7 @@ WizardStepBase {
                         id: customizationsColumn
                         width: parent.width
                         spacing: Style.spacingXSmall
-                        Text { text: "• " + CommonStrings.hostnameConfigured;      font.pointSize: Style.fontSizeDescription; font.family: Style.fontFamily; color: Style.formLabelColor;     visible: wizardContainer.hostnameConfigured;         Accessible.role: Accessible.ListItem; Accessible.name: text }
-                        Text { text: "• " + CommonStrings.localeConfigured;        font.pointSize: Style.fontSizeDescription; font.family: Style.fontFamily; color: Style.formLabelColor;     visible: wizardContainer.localeConfigured;           Accessible.role: Accessible.ListItem; Accessible.name: text }
-                        Text { text: "• " + CommonStrings.userAccountConfigured;   font.pointSize: Style.fontSizeDescription; font.family: Style.fontFamily; color: Style.formLabelColor;     visible: wizardContainer.userConfigured;             Accessible.role: Accessible.ListItem; Accessible.name: text }
-                        Text { text: "• " + CommonStrings.wifiConfigured;          font.pointSize: Style.fontSizeDescription; font.family: Style.fontFamily; color: Style.formLabelColor;     visible: wizardContainer.wifiConfigured;             Accessible.role: Accessible.ListItem; Accessible.name: text }
-                        Text { text: "• " + CommonStrings.sshEnabled;              font.pointSize: Style.fontSizeDescription; font.family: Style.fontFamily; color: Style.formLabelColor;     visible: wizardContainer.sshEnabled;                 Accessible.role: Accessible.ListItem; Accessible.name: text }
-                        Text { text: "• " + CommonStrings.piConnectEnabled;        font.pointSize: Style.fontSizeDescription; font.family: Style.fontFamily; color: Style.formLabelColor;     visible: wizardContainer.piConnectEnabled;           Accessible.role: Accessible.ListItem; Accessible.name: text }
-                        Text { text: "• " + CommonStrings.usbGadgetEnabled;        font.pointSize: Style.fontSizeDescription; font.family: Style.fontFamily; color: Style.formLabelColor;     visible: wizardContainer.featUsbGadgetEnabled;       Accessible.role: Accessible.ListItem; Accessible.name: text }
-                        Text { text: "• " + CommonStrings.i2cEnabled;              font.pointSize: Style.fontSizeDescription; font.family: Style.fontFamily; color: Style.formLabelColor;     visible: wizardContainer.ifI2cEnabled;               Accessible.role: Accessible.ListItem; Accessible.name: text }
-                        Text { text: "• " + CommonStrings.spiEnabled;              font.pointSize: Style.fontSizeDescription; font.family: Style.fontFamily; color: Style.formLabelColor;     visible: wizardContainer.ifSpiEnabled;               Accessible.role: Accessible.ListItem; Accessible.name: text }
-                        Text { text: "• " + CommonStrings.onewireEnabled;          font.pointSize: Style.fontSizeDescription; font.family: Style.fontFamily; color: Style.formLabelColor;     visible: wizardContainer.if1WireEnabled;             Accessible.role: Accessible.ListItem; Accessible.name: text }
-                        Text { text: "• " + CommonStrings.serialConfigured;        font.pointSize: Style.fontSizeDescription; font.family: Style.fontFamily; color: Style.formLabelColor;     visible: wizardContainer.ifSerial !== "" && wizardContainer.ifSerial !== "Disabled"; Accessible.role: Accessible.ListItem; Accessible.name: text }
+                        // EVE OS imager: no RPi-specific customizations
                     }
                 }
                 ScrollBar.vertical: ScrollBar {
@@ -613,12 +573,40 @@ WizardStepBase {
     // Update isWriting state when write completes
     Connections {
         target: imageWriter
+
+        function onWriteProgress(now, total) {
+            if (root.isWriting) {
+                if (root.isIndeterminateProgress) {
+                    var bytesWrittenMB = Math.round(now / (1024 * 1024))
+                    progressText.text = qsTr("Writing… %1 MB written").arg(bytesWrittenMB)
+                } else {
+                    var progress = total > 0 ? (now / total) * 100 : 0
+                    progressBar.value = progress
+                    progressText.text = qsTr("Writing… %1%").arg(Math.round(progress))
+                }
+            }
+        }
+
+        function onVerifyProgress(now, total) {
+            if (root.isWriting) {
+                root.operationWarning = ""
+                var progress = total > 0 ? (now / total) * 100 : 0
+                progressBar.value = progress
+                progressText.text = qsTr("Verifying… %1%").arg(Math.round(progress))
+            }
+        }
+
+        function onPreparationStatusUpdate(msg) {
+            if (root.isWriting) {
+                progressText.text = msg
+            }
+        }
+
         function onSuccess() {
             progressText.text = qsTr("Write completed successfully!")
-
-            // Automatically advance to the done screen
             wizardContainer.nextStep()
         }
+
         function onError(msg) {
             progressText.text = qsTr("Write failed: %1").arg(msg)
         }
@@ -629,12 +617,12 @@ WizardStepBase {
                 progressBar.value = 100
             }
         }
-        
+
         function onBottleneckStatusChanged(status, throughputKBps) {
             root.bottleneckStatus = status
             root.writeThroughputKBps = throughputKBps
         }
-        
+
         function onOperationWarning(message) {
             root.operationWarning = message
         }
@@ -646,6 +634,24 @@ WizardStepBase {
     onAnyCustomizationsAppliedChanged: rebuildFocusOrder()
     
     Component.onCompleted: {
+        // Configure image source and EVE config whenever this step is shown
+        var cfg = root.wizardContainer
+        if (cfg.useLocalImage && cfg.eveLocalImagePath.length > 0) {
+            root.imageWriter.setSrc("file://" + cfg.eveLocalImagePath)
+        } else if (cfg.eveDownloadUrl.length > 0) {
+            // Use the URL and size resolved by EveVersionStep (Phase 2 live releases)
+            root.imageWriter.setSrc(cfg.eveDownloadUrl,
+                                    cfg.eveDownloadSize, cfg.eveDownloadSize,
+                                    "", false, "EVE OS", cfg.selectedOsName)
+        } else if (cfg.eveVersion.length > 0) {
+            // Fallback: construct URL from version/arch/hv/platform
+            var assetName = cfg.eveArch + "." + cfg.eveHypervisor + "." + cfg.evePlatform + ".installer.raw"
+            var dlUrl = "https://github.com/lf-edge/eve/releases/download/" + cfg.eveVersion + "/" + assetName
+            root.imageWriter.setSrc(dlUrl, 0, 0, "", false, "EVE OS", cfg.selectedOsName)
+        }
+        root.imageWriter.setEveConfig(cfg.eveConfig)
+        root._srcReady = true    // unblock the Write button binding
+
         // Register summary section as first focus group
         registerFocusGroup("summary", function() {
             var items = []
@@ -653,7 +659,6 @@ WizardStepBase {
                 // Only include text labels when screen reader is active
                 if (root.imageWriter && root.imageWriter.isScreenReaderActive()) {
                     items.push(summaryHeading)
-                    items.push(deviceLabel)
                     items.push(osLabel)
                     items.push(storageLabel)
                 }

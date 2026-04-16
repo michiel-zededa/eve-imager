@@ -31,15 +31,18 @@ protected:
     enum fatType _type;
     uint32_t _firstFatStartOffset, _fatSize, _bytesPerCluster, _clusterOffset;
     uint32_t _fat16_rootDirSectors, _fat16_firstRootDirSector;
+    uint32_t _countOfClusters;
     uint32_t _fat32_firstRootDirCluster, _fat32_currentRootDirCluster;
     uint16_t _bytesPerSector, _fat32_fsinfoSector;
     QList<uint32_t> _fatStartOffset;
     QList<uint32_t> _currentDirClusters;
 
     QList<uint32_t> getClusterChain(uint32_t firstCluster);
+    void setFAT12(uint32_t cluster, uint16_t value);
     void setFAT16(uint16_t cluster, uint16_t value);
     void setFAT32(uint32_t cluster, uint32_t value);
     void setFAT(uint32_t cluster, uint32_t value);
+    uint16_t getFAT12(uint32_t cluster);
     uint32_t getFAT(uint32_t cluster);
     void seekCluster(uint32_t cluster);
     uint32_t allocateCluster();
