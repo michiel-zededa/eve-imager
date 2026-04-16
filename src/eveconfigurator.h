@@ -61,6 +61,8 @@ public:
 private:
     /* Build DevicePortConfig/override.json content, or empty if not needed. */
     static QByteArray buildOverrideJson(const QVariantMap &config);
+    /* Build grub.cfg content for installer disk/boot params, or empty if not needed. */
+    static QByteArray buildGrubCfg(const QVariantMap &config);
 };
 
 #endif // EVECONFIGURATOR_H

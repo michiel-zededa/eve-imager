@@ -3,9 +3,6 @@
  * Copyright (C) 2025 ZEDEDA, Inc.
  *
  * Step 2 — EVE OS device configuration.
- *
- * Phase 1: full UI scaffold wired to wizardContainer.eveConfig.
- * Phase 3: hook into EveConfigurator C++ for actual partition injection.
  */
 
 pragma ComponentBehavior: Bound
@@ -30,6 +27,13 @@ WizardStepBase {
     showNextButton: true
     nextButtonEnabled: true
 
+    // ── Helper to update a single key in the eveConfig map ───────────────────
+    function setCfg(key, value) {
+        var c = root.wizardContainer.eveConfig
+        c[key] = value
+        root.wizardContainer.eveConfig = c
+    }
+
     content: [
         Flickable {
             anchors.fill: parent
@@ -43,7 +47,7 @@ WizardStepBase {
                 width: parent.width
                 spacing: Style.spacingMedium
 
-                // ── Controller ────────────────────────────────────────────
+                // ── Controller ────────────────────────────────────────────────
                 Text {
                     text: qsTr("Controller")
                     font.pointSize: Style.fontSizeHeading
@@ -55,29 +59,56 @@ WizardStepBase {
                 }
 
                 WizardSectionContainer {
-                    RowLayout {
+                    ColumnLayout {
                         Layout.fillWidth: true
-                        spacing: Style.spacingSmall
-                        WizardFormLabel {
-                            text: qsTr("Controller URL")
-                            Layout.preferredWidth: Style.scaled(130)
-                        }
-                        ImTextField {
-                            id: controllerUrlField
+                        spacing: Style.formRowSpacing
+
+                        RowLayout {
                             Layout.fillWidth: true
-                            placeholderText: qsTr("e.g. zedcloud.zededa.net")
-                            text: root.wizardContainer.eveConfig.controllerUrl
-                            inputMethodHints: Qt.ImhNoPredictiveText | Qt.ImhUrlCharactersOnly
-                            onTextChanged: {
-                                var cfg = root.wizardContainer.eveConfig
-                                cfg.controllerUrl = text
-                                root.wizardContainer.eveConfig = cfg
+                            spacing: Style.spacingSmall
+                            WizardFormLabel {
+                                text: qsTr("Controller URL")
+                                Layout.preferredWidth: Style.scaled(140)
                             }
+                            ImTextField {
+                                id: controllerUrlField
+                                Layout.fillWidth: true
+                                placeholderText: qsTr("e.g. zedcloud.zededa.net")
+                                text: root.wizardContainer.eveConfig.controllerUrl
+                                inputMethodHints: Qt.ImhNoPredictiveText | Qt.ImhUrlCharactersOnly
+                                onTextChanged: root.setCfg("controllerUrl", text)
+                            }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: Style.spacingSmall
+                            WizardFormLabel {
+                                text: qsTr("Controller CA cert")
+                                Layout.preferredWidth: Style.scaled(140)
+                            }
+                            ImTextField {
+                                id: rootCertField
+                                Layout.fillWidth: true
+                                readOnly: true
+                                placeholderText: qsTr("root-certificate.pem  (optional)")
+                                text: root.wizardContainer.eveConfig.rootCertPath
+                            }
+                            ImButton {
+                                text: qsTr("Browse…")
+                                onClicked: rootCertPicker.open()
+                            }
+                        }
+
+                        WizardDescriptionText {
+                            text: qsTr("The CA certificate used to verify TLS connections to your controller. "
+                                       + "Required for self-hosted or private controller deployments.")
+                            Layout.fillWidth: true
                         }
                     }
                 }
 
-                // ── Networking ────────────────────────────────────────────
+                // ── Networking ────────────────────────────────────────────────
                 Text {
                     text: qsTr("Networking")
                     font.pointSize: Style.fontSizeHeading
@@ -104,11 +135,7 @@ WizardStepBase {
                                 font.family: Style.fontFamily
                                 font.pointSize: Style.fontSizeFormLabel
                                 onCheckedChanged: {
-                                    if (checked) {
-                                        var cfg = root.wizardContainer.eveConfig
-                                        cfg.networkMode = "dhcp"
-                                        root.wizardContainer.eveConfig = cfg
-                                    }
+                                    if (checked) root.setCfg("networkMode", "dhcp")
                                 }
                             }
 
@@ -119,11 +146,7 @@ WizardStepBase {
                                 font.family: Style.fontFamily
                                 font.pointSize: Style.fontSizeFormLabel
                                 onCheckedChanged: {
-                                    if (checked) {
-                                        var cfg = root.wizardContainer.eveConfig
-                                        cfg.networkMode = "static"
-                                        root.wizardContainer.eveConfig = cfg
-                                    }
+                                    if (checked) root.setCfg("networkMode", "static")
                                 }
                             }
                         }
@@ -136,36 +159,36 @@ WizardStepBase {
                             RowLayout {
                                 Layout.fillWidth: true
                                 spacing: Style.spacingSmall
-                                WizardFormLabel { text: qsTr("IP address"); Layout.preferredWidth: Style.scaled(130) }
+                                WizardFormLabel { text: qsTr("IP address"); Layout.preferredWidth: Style.scaled(140) }
                                 ImTextField {
                                     Layout.fillWidth: true
                                     placeholderText: qsTr("e.g. 192.168.1.100/24")
                                     text: root.wizardContainer.eveConfig.staticIp
-                                    onTextChanged: { var c = root.wizardContainer.eveConfig; c.staticIp = text; root.wizardContainer.eveConfig = c }
+                                    onTextChanged: root.setCfg("staticIp", text)
                                 }
                             }
 
                             RowLayout {
                                 Layout.fillWidth: true
                                 spacing: Style.spacingSmall
-                                WizardFormLabel { text: qsTr("Gateway"); Layout.preferredWidth: Style.scaled(130) }
+                                WizardFormLabel { text: qsTr("Gateway"); Layout.preferredWidth: Style.scaled(140) }
                                 ImTextField {
                                     Layout.fillWidth: true
                                     placeholderText: qsTr("e.g. 192.168.1.1")
                                     text: root.wizardContainer.eveConfig.gateway
-                                    onTextChanged: { var c = root.wizardContainer.eveConfig; c.gateway = text; root.wizardContainer.eveConfig = c }
+                                    onTextChanged: root.setCfg("gateway", text)
                                 }
                             }
 
                             RowLayout {
                                 Layout.fillWidth: true
                                 spacing: Style.spacingSmall
-                                WizardFormLabel { text: qsTr("DNS server"); Layout.preferredWidth: Style.scaled(130) }
+                                WizardFormLabel { text: qsTr("DNS server"); Layout.preferredWidth: Style.scaled(140) }
                                 ImTextField {
                                     Layout.fillWidth: true
                                     placeholderText: qsTr("e.g. 8.8.8.8")
                                     text: root.wizardContainer.eveConfig.dns
-                                    onTextChanged: { var c = root.wizardContainer.eveConfig; c.dns = text; root.wizardContainer.eveConfig = c }
+                                    onTextChanged: root.setCfg("dns", text)
                                 }
                             }
                         }
@@ -173,19 +196,19 @@ WizardStepBase {
                         RowLayout {
                             Layout.fillWidth: true
                             spacing: Style.spacingSmall
-                            WizardFormLabel { text: qsTr("HTTP proxy"); Layout.preferredWidth: Style.scaled(130) }
+                            WizardFormLabel { text: qsTr("HTTP proxy"); Layout.preferredWidth: Style.scaled(140) }
                             ImTextField {
                                 Layout.fillWidth: true
                                 placeholderText: qsTr("http://proxy.example.com:3128  (optional)")
                                 text: root.wizardContainer.eveConfig.proxyUrl
                                 inputMethodHints: Qt.ImhNoPredictiveText | Qt.ImhUrlCharactersOnly
-                                onTextChanged: { var c = root.wizardContainer.eveConfig; c.proxyUrl = text; root.wizardContainer.eveConfig = c }
+                                onTextChanged: root.setCfg("proxyUrl", text)
                             }
                         }
                     }
                 }
 
-                // ── Device identity ───────────────────────────────────────
+                // ── Device identity ───────────────────────────────────────────
                 Text {
                     text: qsTr("Device identity")
                     font.pointSize: Style.fontSizeHeading
@@ -202,15 +225,15 @@ WizardStepBase {
                         spacing: Style.formRowSpacing
 
                         WizardDescriptionText {
-                            text: qsTr("Optional onboarding certificate, private key, and soft serial number. "
-                                       + "Written into the config partition before flashing.")
+                            text: qsTr("Pre-provision this device with a known identity. "
+                                       + "The onboarding certificate must be pre-registered in your controller.")
                             Layout.fillWidth: true
                         }
 
                         RowLayout {
                             Layout.fillWidth: true
                             spacing: Style.spacingSmall
-                            WizardFormLabel { text: qsTr("Certificate (.pem)"); Layout.preferredWidth: Style.scaled(130) }
+                            WizardFormLabel { text: qsTr("Certificate (.pem)"); Layout.preferredWidth: Style.scaled(140) }
                             ImTextField {
                                 id: certPathField
                                 Layout.fillWidth: true
@@ -224,7 +247,7 @@ WizardStepBase {
                         RowLayout {
                             Layout.fillWidth: true
                             spacing: Style.spacingSmall
-                            WizardFormLabel { text: qsTr("Private key (.pem)"); Layout.preferredWidth: Style.scaled(130) }
+                            WizardFormLabel { text: qsTr("Private key (.pem)"); Layout.preferredWidth: Style.scaled(140) }
                             ImTextField {
                                 id: keyPathField
                                 Layout.fillWidth: true
@@ -238,13 +261,136 @@ WizardStepBase {
                         RowLayout {
                             Layout.fillWidth: true
                             spacing: Style.spacingSmall
-                            WizardFormLabel { text: qsTr("Device serial"); Layout.preferredWidth: Style.scaled(130) }
+                            WizardFormLabel { text: qsTr("Device serial"); Layout.preferredWidth: Style.scaled(140) }
                             ImTextField {
                                 Layout.fillWidth: true
                                 placeholderText: qsTr("Soft serial number  (optional)")
                                 text: root.wizardContainer.eveConfig.deviceSerial
-                                onTextChanged: { var c = root.wizardContainer.eveConfig; c.deviceSerial = text; root.wizardContainer.eveConfig = c }
+                                onTextChanged: root.setCfg("deviceSerial", text)
                             }
+                        }
+                    }
+                }
+
+                // ── SSH access ────────────────────────────────────────────────
+                Text {
+                    text: qsTr("SSH access")
+                    font.pointSize: Style.fontSizeHeading
+                    font.family: Style.fontFamilyBold
+                    font.bold: true
+                    color: Style.zededaNavy
+                    Layout.fillWidth: true
+                    Layout.topMargin: Style.spacingSmall
+                }
+
+                WizardSectionContainer {
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: Style.formRowSpacing
+
+                        WizardDescriptionText {
+                            text: qsTr("Add an SSH public key to enable debug console access on the device. "
+                                       + "Paste the key below or load it from a file.")
+                            Layout.fillWidth: true
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: Style.spacingSmall
+
+                            ScrollView {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: Style.scaled(70)
+                                clip: true
+
+                                TextArea {
+                                    id: authorizedKeysArea
+                                    placeholderText: qsTr("ssh-ed25519 AAAA… user@host  (optional)")
+                                    text: root.wizardContainer.eveConfig.authorizedKeys
+                                    font.family: "Menlo, Monaco, Courier New, monospace"
+                                    font.pointSize: Style.fontSizeDescription
+                                    wrapMode: TextArea.Wrap
+                                    onTextChanged: root.setCfg("authorizedKeys", text)
+                                    background: Rectangle {
+                                        color: Style.inputBackgroundColor
+                                        border.color: authorizedKeysArea.activeFocus
+                                                      ? Style.inputBorderFocusColor
+                                                      : Style.inputBorderColor
+                                        radius: Style.inputBorderRadius
+                                    }
+                                }
+                            }
+
+                            ImButton {
+                                text: qsTr("Load file…")
+                                onClicked: sshKeyFilePicker.open()
+                                Layout.alignment: Qt.AlignTop
+                            }
+                        }
+                    }
+                }
+
+                // ── Installation ──────────────────────────────────────────────
+                Text {
+                    text: qsTr("Installation")
+                    font.pointSize: Style.fontSizeHeading
+                    font.family: Style.fontFamilyBold
+                    font.bold: true
+                    color: Style.zededaNavy
+                    Layout.fillWidth: true
+                    Layout.topMargin: Style.spacingSmall
+                }
+
+                WizardSectionContainer {
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: Style.formRowSpacing
+
+                        WizardDescriptionText {
+                            text: qsTr("Control which disks EVE installs onto. Leave blank to use the installer's defaults. "
+                                       + "Use Linux disk names without /dev/ prefix (e.g. nvme0n1, sda).")
+                            Layout.fillWidth: true
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: Style.spacingSmall
+                            WizardFormLabel {
+                                text: qsTr("EVE install disk")
+                                Layout.preferredWidth: Style.scaled(140)
+                            }
+                            ImTextField {
+                                Layout.fillWidth: true
+                                placeholderText: qsTr("e.g. nvme0n1  (optional, default: auto)")
+                                text: root.wizardContainer.eveConfig.installDisk
+                                inputMethodHints: Qt.ImhNoPredictiveText
+                                onTextChanged: root.setCfg("installDisk", text)
+                            }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: Style.spacingSmall
+                            WizardFormLabel {
+                                text: qsTr("/persist disk")
+                                Layout.preferredWidth: Style.scaled(140)
+                            }
+                            ImTextField {
+                                Layout.fillWidth: true
+                                placeholderText: qsTr("e.g. sda  (optional, defaults to same as install disk)")
+                                text: root.wizardContainer.eveConfig.persistDisk
+                                inputMethodHints: Qt.ImhNoPredictiveText
+                                onTextChanged: root.setCfg("persistDisk", text)
+                            }
+                        }
+
+                        CheckBox {
+                            id: rebootCheckbox
+                            text: qsTr("Reboot automatically after installation completes")
+                            checked: root.wizardContainer.eveConfig.rebootAfterInstall
+                            font.family: Style.fontFamily
+                            font.pointSize: Style.fontSizeFormLabel
+                            onCheckedChanged: root.setCfg("rebootAfterInstall", checked)
                         }
                     }
                 }
@@ -254,7 +400,21 @@ WizardStepBase {
         }
     ] // content:
 
-    // File dialogs — outside content[] so they aren't clipped
+    // ── File dialogs ──────────────────────────────────────────────────────────
+
+    ImFileDialog {
+        id: rootCertPicker
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        title: qsTr("Select controller CA certificate")
+        nameFilters: ["PEM / CRT files (*.pem *.crt)", "All files (*)"]
+        onAccepted: {
+            var path = selectedFile.toString().replace(/^(file:\/{2,3})/, "")
+            root.setCfg("rootCertPath", path)
+            rootCertField.text = path
+        }
+    }
+
     ImFileDialog {
         id: certFilePicker
         parent: Overlay.overlay
@@ -263,9 +423,7 @@ WizardStepBase {
         nameFilters: ["PEM files (*.pem *.crt)", "All files (*)"]
         onAccepted: {
             var path = selectedFile.toString().replace(/^(file:\/{2,3})/, "")
-            var cfg = root.wizardContainer.eveConfig
-            cfg.onboardCertPath = path
-            root.wizardContainer.eveConfig = cfg
+            root.setCfg("onboardCertPath", path)
             certPathField.text = path
         }
     }
@@ -278,10 +436,30 @@ WizardStepBase {
         nameFilters: ["PEM files (*.pem *.key)", "All files (*)"]
         onAccepted: {
             var path = selectedFile.toString().replace(/^(file:\/{2,3})/, "")
-            var cfg = root.wizardContainer.eveConfig
-            cfg.onboardKeyPath = path
-            root.wizardContainer.eveConfig = cfg
+            root.setCfg("onboardKeyPath", path)
             keyPathField.text = path
+        }
+    }
+
+    ImFileDialog {
+        id: sshKeyFilePicker
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        title: qsTr("Select SSH public key")
+        nameFilters: ["Public key files (*.pub)", "All files (*)"]
+        onAccepted: {
+            var path = selectedFile.toString().replace(/^(file:\/{2,3})/, "")
+            // Read the file content and put it in the text area
+            var xhr = new XMLHttpRequest()
+            xhr.open("GET", selectedFile.toString())
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === XMLHttpRequest.DONE) {
+                    var key = xhr.responseText.trim()
+                    root.setCfg("authorizedKeys", key)
+                    authorizedKeysArea.text = key
+                }
+            }
+            xhr.send()
         }
     }
 }

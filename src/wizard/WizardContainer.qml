@@ -88,15 +88,20 @@ Item {
 
     // ── EVE device configuration ──────────────────────────────────────────
     property var eveConfig: ({
-        controllerUrl:   "",
-        networkMode:     "dhcp",   // "dhcp" | "static"
-        staticIp:        "",
-        gateway:         "",
-        dns:             "",
-        proxyUrl:        "",
-        onboardCertPath: "",
-        onboardKeyPath:  "",
-        deviceSerial:    ""
+        controllerUrl:      "",
+        networkMode:        "dhcp",   // "dhcp" | "static"
+        staticIp:           "",
+        gateway:            "",
+        dns:                "",
+        proxyUrl:           "",
+        rootCertPath:       "",   // root-certificate.pem (controller CA)
+        onboardCertPath:    "",
+        onboardKeyPath:     "",
+        deviceSerial:       "",
+        authorizedKeys:     "",   // authorized_keys (SSH public key text)
+        installDisk:        "",   // eve_install_disk grub param
+        persistDisk:        "",   // eve_persist_disk grub param
+        rebootAfterInstall: false // eve_reboot_after_install grub param
     })
     property bool eveConfigured: false
 
