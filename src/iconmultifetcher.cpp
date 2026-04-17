@@ -6,6 +6,7 @@
 #include "iconmultifetcher.h"
 #include "iconimageprovider.h"
 #include "curlnetworkconfig.h"
+#include "logging.h"
 
 #include <QDebug>
 
@@ -50,7 +51,7 @@ void IconMultiFetcher::shutdown()
     if (_thread && _thread->isRunning()) {
         _thread->wait(5000); // 5 second timeout
         if (_thread->isRunning()) {
-            qWarning() << "IconMultiFetcher: Thread did not exit cleanly, terminating";
+            qCWarning(lcIcons) << "IconMultiFetcher: Thread did not exit cleanly, terminating";
             _thread->terminate();
             _thread->wait();
         }
@@ -66,7 +67,7 @@ void IconMultiFetcher::clearCache()
     _cache.clear();
     _cacheOrder.clear();
     _cacheBytes = 0;
-    qDebug() << "IconMultiFetcher: Cache cleared";
+    qCDebug(lcIcons) << "IconMultiFetcher: Cache cleared";
 }
 
 QByteArray IconMultiFetcher::getCachedData(const QString &urlKey) const
@@ -85,7 +86,7 @@ static constexpr int MaxPendingRequests = 500;
 void IconMultiFetcher::queueFetch(IconImageResponse *response, const QUrl &url)
 {
     if (_shutdown.load()) {
-        qWarning() << "IconMultiFetcher: Ignoring fetch request during shutdown";
+        qCWarning(lcIcons) << "IconMultiFetcher: Ignoring fetch request during shutdown";
         return;
     }
     
@@ -97,7 +98,7 @@ void IconMultiFetcher::queueFetch(IconImageResponse *response, const QUrl &url)
     // DoS protection: reject if queue is full (cache hits still work)
     if (_pendingRequests.size() >= MaxPendingRequests) {
         locker.unlock();
-        qWarning() << "IconMultiFetcher: Request queue full, rejecting:" << url.host();
+        qCWarning(lcIcons) << "IconMultiFetcher: Request queue full, rejecting:" << url.host();
         if (response) {
             QMetaObject::invokeMethod(response, "onFetchComplete",
                                       Qt::QueuedConnection,
@@ -110,7 +111,7 @@ void IconMultiFetcher::queueFetch(IconImageResponse *response, const QUrl &url)
     // Check cache first
     auto cacheIt = _cache.find(urlKey);
     if (cacheIt != _cache.end()) {
-        // Cache hit! Move to end of LRU order (TODO: optimize to O(1) with linked list)
+        // Cache hit — move to end of LRU order
         _cacheOrder.removeOne(urlKey);
         _cacheOrder.append(urlKey);
         
@@ -148,7 +149,7 @@ void IconMultiFetcher::cancelFetch(IconImageResponse *response)
 
 void IconMultiFetcher::runEventLoop()
 {
-    qDebug() << "IconMultiFetcher: Event loop starting";
+    qCDebug(lcIcons) << "IconMultiFetcher: Event loop starting";
     
     // Initialize curl_multi handle
     _multi = curl_multi_init();
@@ -172,7 +173,7 @@ void IconMultiFetcher::runEventLoop()
         int runningHandles = 0;
         CURLMcode mc = curl_multi_perform(_multi, &runningHandles);
         if (mc != CURLM_OK) {
-            qWarning() << "IconMultiFetcher: curl_multi_perform error:" << curl_multi_strerror(mc);
+            qCWarning(lcIcons) << "IconMultiFetcher: curl_multi_perform error:" << curl_multi_strerror(mc);
         }
         
         // Process completed transfers
@@ -183,7 +184,7 @@ void IconMultiFetcher::runEventLoop()
         int numfds = 0;
         mc = curl_multi_poll(_multi, nullptr, 0, 100, &numfds); // 100ms timeout
         if (mc != CURLM_OK) {
-            qWarning() << "IconMultiFetcher: curl_multi_poll error:" << curl_multi_strerror(mc);
+            qCWarning(lcIcons) << "IconMultiFetcher: curl_multi_poll error:" << curl_multi_strerror(mc);
         }
         
         // Also check if we have pending work
@@ -210,7 +211,7 @@ void IconMultiFetcher::runEventLoop()
     curl_multi_cleanup(_multi);
     _multi = nullptr;
     
-    qDebug() << "IconMultiFetcher: Event loop exiting";
+    qCDebug(lcIcons) << "IconMultiFetcher: Event loop exiting";
 }
 
 void IconMultiFetcher::processPendingRequests()
@@ -279,7 +280,7 @@ void IconMultiFetcher::processPendingRequests()
             
             CURLMcode mc = curl_multi_add_handle(_multi, easy);
             if (mc != CURLM_OK) {
-                qWarning() << "IconMultiFetcher: Failed to add handle:" << curl_multi_strerror(mc);
+                qCWarning(lcIcons) << "IconMultiFetcher: Failed to add handle:" << curl_multi_strerror(mc);
                 _inFlightUrls.remove(urlKey);
                 locker.unlock();
                 cleanupTransfer(easy);
@@ -345,7 +346,7 @@ void IconMultiFetcher::processCompletedTransfers()
             
             auto it = _activeTransfers.find(easy);
             if (it == _activeTransfers.end()) {
-                qWarning() << "IconMultiFetcher: Completed transfer not found in active transfers";
+                qCWarning(lcIcons) << "IconMultiFetcher: Completed transfer not found in active transfers";
                 continue;
             }
             
@@ -356,7 +357,7 @@ void IconMultiFetcher::processCompletedTransfers()
                 errorMsg = data->errorBuffer[0] 
                     ? QString::fromUtf8(data->errorBuffer)
                     : QString::fromUtf8(curl_easy_strerror(result));
-                qDebug() << "IconMultiFetcher: Fetch failed for" << data->url.host() << "-" << errorMsg;
+                qCDebug(lcIcons) << "IconMultiFetcher: Fetch failed for" << data->url.host() << "-" << errorMsg;
             }
             
             // Add to cache (including failures, to avoid retrying broken URLs)
@@ -364,7 +365,6 @@ void IconMultiFetcher::processCompletedTransfers()
             // 1. Broken icon URLs are typically permanent (wrong URL in OS list)
             // 2. Retrying 50 broken URLs on every scroll would be wasteful
             // 3. Cache is cleared when switching repositories anyway
-            // TODO: Consider adding TTL for negative cache entries if needed
             {
                 QMutexLocker locker(&_mutex);
                 addToCache(data->urlKey, data->buffer);  // Use pre-computed key
@@ -406,13 +406,13 @@ CURL* IconMultiFetcher::createEasyHandle(const QUrl &url, const QString &urlKey)
     const QString scheme = url.scheme().toLower();
     if (scheme != QLatin1String("http") && scheme != QLatin1String("https") 
         && scheme != QLatin1String("file")) {
-        qWarning() << "IconMultiFetcher: Rejecting unsupported URL scheme:" << scheme;
+        qCWarning(lcIcons) << "IconMultiFetcher: Rejecting unsupported URL scheme:" << scheme;
         return nullptr;
     }
     
     CURL *easy = curl_easy_init();
     if (!easy) {
-        qWarning() << "IconMultiFetcher: Failed to create easy handle";
+        qCWarning(lcIcons) << "IconMultiFetcher: Failed to create easy handle";
         return nullptr;
     }
     

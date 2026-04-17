@@ -1915,8 +1915,8 @@ void ImageWriter::setHWFilterList(const QJsonArray &tags, const bool &inclusive)
 }
 
 void ImageWriter::setHWCapabilitiesList(const QJsonArray &json) {
-    // TODO: maybe also clear the sw capabilities as in the UI the OS is unselected when this changes
     _hwCapabilities = json;
+    _swCapabilities = QJsonArray{};
 }
 
 static inline void pushLower(QStringList &dst, const QString &s) {
@@ -2330,7 +2330,6 @@ void ImageWriter::setOsListRefreshOverride(int intervalMinutes, int jitterMinute
     }
 }
 
-// TODO: duplicate
 void ImageWriter::setCustomRepo(const QUrl &repo)
 {
     _repo = repo;

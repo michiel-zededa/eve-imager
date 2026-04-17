@@ -5,6 +5,7 @@
 
 #include "evereleasefetcher.h"
 #include "curlfetcher.h"
+#include "logging.h"
 
 #include <QDebug>
 #include <QJsonArray>

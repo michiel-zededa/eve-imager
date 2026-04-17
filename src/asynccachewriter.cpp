@@ -4,6 +4,7 @@
  */
 
 #include "asynccachewriter.h"
+#include "logging.h"
 #include <QDebug>
 #include <QFileInfo>
 
@@ -50,7 +51,7 @@ void AsyncCacheWriter::_initializeQueueLimits()
         _maxQueueMemory = 128 * 1024 * 1024;  // 128MB max
     }
     
-    qDebug() << "AsyncCacheWriter: Queue limits set to" << _maxQueueSize << "chunks,"
+    qCDebug(lcCache) << "AsyncCacheWriter: Queue limits set to" << _maxQueueSize << "chunks,"
              << (_maxQueueMemory / (1024 * 1024)) << "MB for" << totalMemMB << "MB system";
 }
 
@@ -62,7 +63,7 @@ AsyncCacheWriter::~AsyncCacheWriter()
 bool AsyncCacheWriter::open(const QString &filename, qint64 preallocateSize)
 {
     if (_isActive) {
-        qDebug() << "AsyncCacheWriter: Already active";
+        qCDebug(lcCache) << "AsyncCacheWriter: Already active";
         return false;
     }
     
@@ -70,14 +71,14 @@ bool AsyncCacheWriter::open(const QString &filename, qint64 preallocateSize)
     _file.setFileName(filename);
     
     if (!_file.open(QIODevice::WriteOnly)) {
-        qDebug() << "AsyncCacheWriter: Failed to open" << filename << "-" << _file.errorString();
+        qCDebug(lcCache) << "AsyncCacheWriter: Failed to open" << filename << "-" << _file.errorString();
         return false;
     }
     
     if (preallocateSize > 0) {
         // Pre-allocate space to avoid fragmentation
         if (!_file.resize(preallocateSize)) {
-            qDebug() << "AsyncCacheWriter: Failed to pre-allocate" << preallocateSize << "bytes";
+            qCDebug(lcCache) << "AsyncCacheWriter: Failed to pre-allocate" << preallocateSize << "bytes";
             // Continue anyway, not fatal
         }
         // Seek back to beginning
@@ -104,7 +105,7 @@ bool AsyncCacheWriter::open(const QString &filename, qint64 preallocateSize)
     // Start the writer thread
     start();
     
-    qDebug() << "AsyncCacheWriter: Opened" << filename 
+    qCDebug(lcCache) << "AsyncCacheWriter: Opened" << filename 
              << "with preallocation:" << preallocateSize;
     return true;
 }
@@ -146,7 +147,7 @@ bool AsyncCacheWriter::write(const char *data, size_t len)
             // If still full after waiting, cache I/O is too slow - disable caching
             if (_queue.size() >= _maxQueueSize || 
                 queueMemoryUsage() >= _maxQueueMemory) {
-                qDebug() << "AsyncCacheWriter: Queue still full after" << waitedMs 
+                qCDebug(lcCache) << "AsyncCacheWriter: Queue still full after" << waitedMs 
                          << "ms wait. Cache I/O too slow, disabling caching to avoid blocking download.";
                 _hasError = true;  // Signal error state
                 return false;
@@ -173,7 +174,7 @@ void AsyncCacheWriter::finish()
         return;
     }
     
-    qDebug() << "AsyncCacheWriter: Finishing - waiting for" 
+    qCDebug(lcCache) << "AsyncCacheWriter: Finishing - waiting for" 
              << (_bytesQueued - _bytesWritten) << "bytes to be written";
     
     _finishing = true;
@@ -189,7 +190,7 @@ void AsyncCacheWriter::finish()
         _file.flush();
         _file.close();
         
-        qDebug() << "AsyncCacheWriter: Finished successfully, wrote" 
+        qCDebug(lcCache) << "AsyncCacheWriter: Finished successfully, wrote" 
                  << _bytesWritten << "bytes";
         
         emit finished(_hash.result().toHex());
@@ -204,7 +205,7 @@ void AsyncCacheWriter::cancel()
         return;
     }
     
-    qDebug() << "AsyncCacheWriter: Cancelling";
+    qCDebug(lcCache) << "AsyncCacheWriter: Cancelling";
     
     _shouldStop = true;
     
@@ -218,11 +219,11 @@ void AsyncCacheWriter::cancel()
     // If the thread is stuck in a slow write, it will eventually complete.
     bool threadStopped = wait(2000);
     if (!threadStopped) {
-        qDebug() << "AsyncCacheWriter: Thread still running after 2s, waiting longer...";
+        qCDebug(lcCache) << "AsyncCacheWriter: Thread still running after 2s, waiting longer...";
         // Give it more time - the thread should exit once its current I/O completes
         threadStopped = wait(8000);
         if (!threadStopped) {
-            qDebug() << "AsyncCacheWriter: Thread didn't stop after 10s total - may be stuck in I/O";
+            qCDebug(lcCache) << "AsyncCacheWriter: Thread didn't stop after 10s total - may be stuck in I/O";
         }
     }
     
@@ -232,7 +233,7 @@ void AsyncCacheWriter::cancel()
     if (threadStopped) {
         cleanup();
     } else {
-        qDebug() << "AsyncCacheWriter: Leaving cleanup to thread (still running)";
+        qCDebug(lcCache) << "AsyncCacheWriter: Leaving cleanup to thread (still running)";
     }
     
     _isActive = false;
@@ -240,7 +241,7 @@ void AsyncCacheWriter::cancel()
 
 void AsyncCacheWriter::run()
 {
-    qDebug() << "AsyncCacheWriter: Thread started";
+    qCDebug(lcCache) << "AsyncCacheWriter: Thread started";
     
     while (!_shouldStop) {
         WriteChunk chunk;
@@ -270,7 +271,7 @@ void AsyncCacheWriter::run()
             // Write to file
             qint64 written = _file.write(chunk.data);
             if (written != chunk.data.size()) {
-                qDebug() << "AsyncCacheWriter: Write error -" << _file.errorString();
+                qCDebug(lcCache) << "AsyncCacheWriter: Write error -" << _file.errorString();
                 _hasError = true;
                 emit error(tr("Cache write error: %1").arg(_file.errorString()));
                 break;
@@ -293,7 +294,7 @@ void AsyncCacheWriter::run()
         cleanup();
     }
     
-    qDebug() << "AsyncCacheWriter: Thread finished, wrote" << _bytesWritten << "bytes";
+    qCDebug(lcCache) << "AsyncCacheWriter: Thread finished, wrote" << _bytesWritten << "bytes";
 }
 
 void AsyncCacheWriter::cleanup()
@@ -311,7 +312,7 @@ void AsyncCacheWriter::cleanup()
     
     if (!_filename.isEmpty() && QFileInfo::exists(_filename)) {
         QFile::remove(_filename);
-        qDebug() << "AsyncCacheWriter: Removed cache file" << _filename;
+        qCDebug(lcCache) << "AsyncCacheWriter: Removed cache file" << _filename;
         _filename.clear(); // Prevent double-removal
     }
 }

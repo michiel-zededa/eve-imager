@@ -33,24 +33,27 @@ ColumnLayout {
         var lines = text.split(/\r?\n/)
         var result = []
         var puttyKey = ""
+        var puttyComment = ""
         for (var i = 0; i < lines.length; i++) {
             var trimmed = lines[i].trim()
             // State 1 of PuTTY key (key begins)
             if (trimmed.startsWith("---- BEGIN SSH")) {
                 puttyKey = "ssh-rsa " // Add the required prefix
+                puttyComment = ""
                 continue
             }
             // Optional(?) state 2 of PuTTY key (comment)
             if (puttyKey.length > 0 && trimmed.startsWith("Comment:")) {
+                puttyComment = trimmed.substring("Comment:".length).trim()
                 continue
             }
             // Final state (4) of PuTTY key (end of key)
             if (trimmed.startsWith("---- END SSH")) {
-                // FIXME: put comment text after the key?
                 if (puttyKey.length > 0) {
-                    result.push(puttyKey)
+                    result.push(puttyComment.length > 0 ? puttyKey + " " + puttyComment : puttyKey)
                 }
                 puttyKey = ""
+                puttyComment = ""
                 continue
             }
             // We'll be in state 3 of PuTTY key (the key itself) for a few lines.

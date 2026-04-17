@@ -1,5 +1,6 @@
 #include "devicewrapperfatpartition.h"
 #include "devicewrapperstructs.h"
+#include "logging.h"
 #include <QDebug>
 #include <QStringList>
 
@@ -296,7 +297,7 @@ bool DeviceWrapperFatPartition::deleteFile(const QString &filename)
     if (filename.contains("/")) {
         QStringList parts = filename.split("/", Qt::SkipEmptyParts);
         if (parts.size() < 2) {
-            qDebug() << "DeviceWrapperFatPartition::deleteFile: invalid path" << filename;
+            qCDebug(lcFat) << "DeviceWrapperFatPartition::deleteFile: invalid path" << filename;
             return false;
         }
         
@@ -309,84 +310,83 @@ bool DeviceWrapperFatPartition::deleteFile(const QString &filename)
         struct dir_entry dirEntry;
         
         if (!getDirEntry(dirName, &dirEntry)) {
-            qDebug() << "DeviceWrapperFatPartition::deleteFile: directory not found:" << dirName;
+            qCDebug(lcFat) << "DeviceWrapperFatPartition::deleteFile: directory not found:" << dirName;
             return false;
         }
         
         if (!(dirEntry.DIR_Attr & ATTR_DIRECTORY)) {
-            qDebug() << "DeviceWrapperFatPartition::deleteFile:" << dirName << "is not a directory";
+            qCDebug(lcFat) << "DeviceWrapperFatPartition::deleteFile:" << dirName << "is not a directory";
             return false;
         }
         
         // Switch to subdirectory
         uint32_t dirCluster = (dirEntry.DIR_FstClusHI << 16) | dirEntry.DIR_FstClusLO;
-        qDebug() << "DeviceWrapperFatPartition::deleteFile: switching to directory cluster" << dirCluster;
+        qCDebug(lcFat) << "DeviceWrapperFatPartition::deleteFile: switching to directory cluster" << dirCluster;
         _fat32_currentRootDirCluster = dirCluster;
         _currentDirClusters.clear();
         _currentDirClusters.append(dirCluster);
         
         // Get the file entry in subdirectory
         QString fileNameOnly = parts[parts.size() - 1];
-        qDebug() << "DeviceWrapperFatPartition::deleteFile: searching for file" << fileNameOnly << "in subdirectory";
+        qCDebug(lcFat) << "DeviceWrapperFatPartition::deleteFile: searching for file" << fileNameOnly << "in subdirectory";
         bool found = getDirEntry(fileNameOnly, &entry);
-        qDebug() << "DeviceWrapperFatPartition::deleteFile: getDirEntry returned" << found;
+        qCDebug(lcFat) << "DeviceWrapperFatPartition::deleteFile: getDirEntry returned" << found;
         
         // Restore directory state
         _fat32_currentRootDirCluster = savedRootDirCluster;
         _currentDirClusters = savedDirClusters;
         
         if (!found) {
-            qDebug() << "DeviceWrapperFatPartition::deleteFile: file not found in directory:" << filename;
+            qCDebug(lcFat) << "DeviceWrapperFatPartition::deleteFile: file not found in directory:" << filename;
             return false;
         }
         
         // Mark as deleted and update
+        uint32_t firstCluster = (static_cast<uint32_t>(entry.DIR_FstClusHI) << 16) | entry.DIR_FstClusLO;
         entry.DIR_Name[0] = 0xE5;
-        
+
         // Switch back to subdirectory to update
         _fat32_currentRootDirCluster = dirCluster;
         _currentDirClusters.clear();
         _currentDirClusters.append(dirCluster);
-        
+
         updateDirEntry(&entry);
-        
+
         // Restore directory state again
         _fat32_currentRootDirCluster = savedRootDirCluster;
         _currentDirClusters = savedDirClusters;
-        
-        qDebug() << "DeviceWrapperFatPartition::deleteFile: deleted" << filename;
+
+        freeClusterChain(firstCluster);
+        qCDebug(lcFat) << "DeviceWrapperFatPartition::deleteFile: deleted" << filename;
         return true;
     }
     
     // Simple case: file or directory in root directory
-    qDebug() << "DeviceWrapperFatPartition::deleteFile: deleting" << filename << "from root";
+    qCDebug(lcFat) << "DeviceWrapperFatPartition::deleteFile: deleting" << filename << "from root";
     if (!getDirEntry(filename, &entry)) {
-        qDebug() << "DeviceWrapperFatPartition::deleteFile: entry not found:" << filename;
+        qCDebug(lcFat) << "DeviceWrapperFatPartition::deleteFile: entry not found:" << filename;
         return false;
     }
     
     QByteArray originalName((char *) entry.DIR_Name, sizeof(entry.DIR_Name));
-    qDebug() << "DeviceWrapperFatPartition::deleteFile: found entry with name:" << originalName.toHex(':');
+    qCDebug(lcFat) << "DeviceWrapperFatPartition::deleteFile: found entry with name:" << originalName.toHex(':');
     
     // Check if it's a directory
     if (entry.DIR_Attr & ATTR_DIRECTORY) {
-        qDebug() << "DeviceWrapperFatPartition::deleteFile: entry is a directory";
+        qCDebug(lcFat) << "DeviceWrapperFatPartition::deleteFile: entry is a directory";
         // For directories, we just mark them as deleted
         // The caller should ensure all files in the directory are deleted first
     }
     
     // Mark the entry as deleted by setting first byte to 0xE5
+    uint32_t firstCluster = (static_cast<uint32_t>(entry.DIR_FstClusHI) << 16) | entry.DIR_FstClusLO;
     entry.DIR_Name[0] = 0xE5;
-    
-    qDebug() << "DeviceWrapperFatPartition::deleteFile: marked as deleted, calling updateDirEntry";
-    // Update the directory entry
+
+    qCDebug(lcFat) << "DeviceWrapperFatPartition::deleteFile: marked as deleted, calling updateDirEntry";
     updateDirEntry(&entry);
-    
-    // TODO: Free the clusters used by the file in the FAT
-    // For now, just marking as deleted is sufficient for our use case
-    // since we're about to rewrite the entire partition anyway
-    
-    qDebug() << "DeviceWrapperFatPartition::deleteFile: deleted" << filename;
+    freeClusterChain(firstCluster);
+
+    qCDebug(lcFat) << "DeviceWrapperFatPartition::deleteFile: deleted" << filename;
     return true;
 }
 
@@ -398,7 +398,7 @@ QByteArray DeviceWrapperFatPartition::readFile(const QString &filename)
     if (filename.contains("/")) {
         QStringList parts = filename.split("/", Qt::SkipEmptyParts);
         if (parts.size() < 2) {
-            qDebug() << "DeviceWrapperFatPartition::readFile: invalid path" << filename;
+            qCDebug(lcFat) << "DeviceWrapperFatPartition::readFile: invalid path" << filename;
             return QByteArray();
         }
         
@@ -408,12 +408,12 @@ QByteArray DeviceWrapperFatPartition::readFile(const QString &filename)
         
         // Find the directory entry
         if (!getDirEntry(dirName, &dirEntry)) {
-            qDebug() << "DeviceWrapperFatPartition::readFile: directory not found:" << dirName;
+            qCDebug(lcFat) << "DeviceWrapperFatPartition::readFile: directory not found:" << dirName;
             return QByteArray();
         }
         
         if (!(dirEntry.DIR_Attr & ATTR_DIRECTORY)) {
-            qDebug() << "DeviceWrapperFatPartition::readFile:" << dirName << "is not a directory";
+            qCDebug(lcFat) << "DeviceWrapperFatPartition::readFile:" << dirName << "is not a directory";
             return QByteArray();
         }
         
@@ -539,7 +539,7 @@ QByteArray DeviceWrapperFatPartition::readFile(const QString &filename)
         }
         
         if (!found) {
-            qDebug() << "DeviceWrapperFatPartition::readFile: searched" << entriesChecked 
+            qCDebug(lcFat) << "DeviceWrapperFatPartition::readFile: searched" << entriesChecked 
                      << "entries in" << dirName << ", file" << fileName << "not found";
         }
         
@@ -548,7 +548,7 @@ QByteArray DeviceWrapperFatPartition::readFile(const QString &filename)
         _currentDirClusters = savedDirClusters;
         
         if (!found) {
-            qDebug() << "DeviceWrapperFatPartition::readFile: file not found:" << filename;
+            qCDebug(lcFat) << "DeviceWrapperFatPartition::readFile: file not found:" << filename;
             return QByteArray();
         }
     } else {
@@ -571,7 +571,7 @@ QByteArray DeviceWrapperFatPartition::readFile(const QString &filename)
     
     // If file has data but no cluster, something's wrong
     if (firstCluster == 0) {
-        qDebug() << "DeviceWrapperFatPartition::readFile: file" << filename 
+        qCDebug(lcFat) << "DeviceWrapperFatPartition::readFile: file" << filename 
                  << "has size" << len << "but no cluster allocation";
         return QByteArray();
     }
@@ -878,7 +878,7 @@ void DeviceWrapperFatPartition::writeFile(const QString &filename, const QByteAr
     if (filename.contains("/")) {
         QStringList parts = filename.split("/", Qt::SkipEmptyParts);
         if (parts.size() < 2) {
-            qDebug() << "DeviceWrapperFatPartition::writeFile: invalid path" << filename;
+            qCDebug(lcFat) << "DeviceWrapperFatPartition::writeFile: invalid path" << filename;
             throw std::runtime_error("Invalid file path");
         }
         
@@ -887,12 +887,12 @@ void DeviceWrapperFatPartition::writeFile(const QString &filename, const QByteAr
         struct dir_entry dirEntry;
         
         if (!getDirEntry(dirName, &dirEntry)) {
-            qDebug() << "DeviceWrapperFatPartition::writeFile: directory not found:" << dirName;
+            qCDebug(lcFat) << "DeviceWrapperFatPartition::writeFile: directory not found:" << dirName;
             throw std::runtime_error("Directory not found");
         }
         
         if (!(dirEntry.DIR_Attr & ATTR_DIRECTORY)) {
-            qDebug() << "DeviceWrapperFatPartition::writeFile:" << dirName << "is not a directory";
+            qCDebug(lcFat) << "DeviceWrapperFatPartition::writeFile:" << dirName << "is not a directory";
             throw std::runtime_error("Path component is not a directory");
         }
         
@@ -1003,7 +1003,7 @@ void DeviceWrapperFatPartition::writeFile(const QString &filename, const QByteAr
         _fat32_currentRootDirCluster = savedRootDirCluster;
         _currentDirClusters = savedDirClusters;
         
-        qDebug() << "DeviceWrapperFatPartition::writeFile: wrote" << filename;
+        qCDebug(lcFat) << "DeviceWrapperFatPartition::writeFile: wrote" << filename;
         return;
     }
 
@@ -1438,6 +1438,19 @@ bool DeviceWrapperFatPartition::readDir(struct dir_entry *result)
     }
 
     return true;
+}
+
+void DeviceWrapperFatPartition::freeClusterChain(uint32_t firstCluster)
+{
+    if (firstCluster < 2)
+        return;
+
+    QList<uint32_t> chain = getClusterChain(firstCluster);
+    for (uint32_t cluster : chain)
+        setFAT(cluster, 0);
+
+    if (_type == FAT32 && !chain.isEmpty())
+        updateFSinfo(static_cast<int>(chain.size()), chain.first());
 }
 
 void DeviceWrapperFatPartition::updateFSinfo(int deltaClusters, uint32_t nextFreeClusterHint)
