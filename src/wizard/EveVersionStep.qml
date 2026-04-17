@@ -373,8 +373,8 @@ WizardStepBase {
                     Item { height: Style.spacingSmall }
 
                     WizardDescriptionText {
-                        text: qsTr("Select a locally downloaded EVE OS installer image (.raw format). "
-                                   + "Customization options will be applied before writing.")
+                        text: qsTr("Select a locally downloaded EVE OS installer image (.raw or .iso). "
+                                   + "Config customization is supported for .raw images only.")
                         Layout.fillWidth: true
                     }
 
@@ -385,7 +385,7 @@ WizardStepBase {
                         ImTextField {
                             id: localPathField
                             Layout.fillWidth: true
-                            placeholderText: qsTr("Path to .raw image file…")
+                            placeholderText: qsTr("Path to .raw or .iso image file…")
                             readOnly: true
                             text: root.wizardContainer.eveLocalImagePath
                         }
@@ -408,11 +408,12 @@ WizardStepBase {
         parent: Overlay.overlay
         anchors.centerIn: parent
         title: qsTr("Select EVE OS installer image")
-        nameFilters: ["Raw disk images (*.raw)", "All files (*)"]
+        nameFilters: ["EVE OS installer images (*.raw *.iso)", "Raw disk images (*.raw)", "ISO images (*.iso)", "All files (*)"]
         onAccepted: {
             var path = selectedFile.toString().replace(/^(file:\/{2,3})/, "")
             root.wizardContainer.eveLocalImagePath = path
             root.wizardContainer.useLocalImage = true
+            root.wizardContainer.eveIsIsoImage = path.toLowerCase().endsWith(".iso")
             root.wizardContainer.selectedOsName = qsTr("Local image: %1").arg(path.split("/").pop())
         }
     }
