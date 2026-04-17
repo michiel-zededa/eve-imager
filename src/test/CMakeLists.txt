@@ -487,4 +487,47 @@ add_custom_target(test_rpiboot
     COMMENT "Running all rpiboot unit tests"
 )
 
+# ============================================================================
+# AsyncCacheWriter Tests
+# ============================================================================
+
+add_executable(asynccachewriter_test
+    ${CMAKE_CURRENT_SOURCE_DIR}/../asynccachewriter.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/../asynccachewriter.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../acceleratedcryptographichash.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/../acceleratedcryptographichash.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../systemmemorymanager.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/../systemmemorymanager.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../logging.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/../logging.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../config.h
+    asynccachewriter_test.cpp
+)
+
+set_target_properties(asynccachewriter_test PROPERTIES AUTOMOC ON)
+
+target_link_libraries(asynccachewriter_test PRIVATE
+    Catch2::Catch2WithMain
+    Qt6::Core
+)
+
+target_include_directories(asynccachewriter_test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
+
+target_compile_features(asynccachewriter_test PRIVATE cxx_std_20)
+target_compile_options(asynccachewriter_test PRIVATE
+    -Wall -Wextra -Wpedantic
+    $<$<CONFIG:Debug>:-g -O0>
+)
+
+catch_discover_tests(asynccachewriter_test)
+
+add_custom_target(test_asynccachewriter
+    COMMAND asynccachewriter_test
+    DEPENDS asynccachewriter_test
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    COMMENT "Running AsyncCacheWriter tests"
+)
+
 

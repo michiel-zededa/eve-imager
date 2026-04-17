@@ -30,6 +30,14 @@ BaseDialog {
     property string customRepoUri: ""
     property string originalRepo: ""
 
+    readonly property bool hasChanges: {
+        if (!initialized) return false
+        if (radioOfficial.checked) return originalRepo !== ""
+        if (radioCustomFile.checked) return originalRepo !== selectedRepo.toString()
+        if (radioCustomUri.checked) return originalRepo !== fieldCustomUri.text
+        return false
+    }
+
     Component.onCompleted: {
         registerFocusGroup("header", function(){
             // Only include header text when screen reader is active (otherwise it's not focusable)
@@ -224,15 +232,15 @@ BaseDialog {
 
             ImButtonRed {
                 id: saveButton
-                enabled: (radioOfficial.checked
-                         || (radioCustomFile.checked && popup.selectedRepo.toString() !== "")
-                         || (radioCustomUri.checked && fieldCustomUri.isValid))
+                enabled: popup.hasChanges
+                         && (radioOfficial.checked
+                             || (radioCustomFile.checked && popup.selectedRepo.toString() !== "")
+                             || (radioCustomUri.checked && fieldCustomUri.isValid))
                          // Disable while write is in progress to prevent restarting during write
                          && (imageWriter.writeState === ImageWriter.Idle ||
                              imageWriter.writeState === ImageWriter.Succeeded ||
                              imageWriter.writeState === ImageWriter.Failed ||
                              imageWriter.writeState === ImageWriter.Cancelled)
-                // TODO: only show or enable when settings changed
                 text: qsTr("Apply & Restart")
                 accessibleDescription: qsTr("Apply the new content repository and restart the wizard from the beginning")
                 Layout.minimumWidth: Style.buttonWidthMinimum

@@ -54,6 +54,7 @@ protected:
     void openDir();
     bool readDir(struct dir_entry *result);
     void listFilesInDirectory(const QString &dirPath, uint32_t dirCluster, QStringList &fileList); // Helper for recursive listing
+    void freeClusterChain(uint32_t firstCluster);
     void updateFSinfo(int deltaClusters, uint32_t nextFreeClusterHint);
     uint16_t QTimeToFATtime(const QTime &time);
     uint16_t QDateToFATdate(const QDate &date);
