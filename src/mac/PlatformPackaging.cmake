@@ -6,15 +6,15 @@ if(BUILD_CLI_ONLY)
 else()
     # GUI build: create app bundle
     # Set application name with proper spacing
-    set(APP_NAME "Raspberry Pi Imager")
+    set(APP_NAME "EVE-Imager")
 
     # Set all required bundle properties
     set(MACOSX_BUNDLE_BUNDLE_NAME "${APP_NAME}")
     set(MACOSX_BUNDLE_EXECUTABLE_NAME "${PROJECT_NAME}")
-    set(MACOSX_BUNDLE_GUI_IDENTIFIER "com.raspberrypi.rpi-imager")
+    set(MACOSX_BUNDLE_GUI_IDENTIFIER "net.zededa.eve-imager")
     set(MACOSX_BUNDLE_ICON_FILE "AppIcon")
     string(TIMESTAMP CURRENT_YEAR "%Y")
-    set(MACOSX_BUNDLE_COPYRIGHT "Copyright © 2020-${CURRENT_YEAR} Raspberry Pi Ltd")
+    set(MACOSX_BUNDLE_COPYRIGHT "Copyright © 2025-${CURRENT_YEAR} ZEDEDA, Inc.")
 
     set_target_properties(${PROJECT_NAME} PROPERTIES MACOSX_BUNDLE YES)
 
@@ -186,31 +186,24 @@ add_custom_command(TARGET ${PROJECT_NAME}
     COMMENT "Removing unused QML theme directories and modules (keeping Material theme + Basic fallback)"
 )
 
-# Install pre-compiled icon assets for dark mode + Liquid Glass support (macOS Tahoe+)
-# These were compiled from app_icon_macos.icon using Xcode's actool via a helper project
-# The pre-compiled Assets.car properly contains all appearance variants (light/dark/tinted)
-set(PRECOMPILED_ASSETS_CAR "${CMAKE_CURRENT_SOURCE_DIR}/icons/AppIcon-compiled.car")
+# Install EVE-Imager icon into the app bundle.
+# We ship only the .icns (no .car); macOS falls back cleanly to .icns when
+# Assets.car is absent, so we remove any Qt-generated Assets.car here.
 set(PRECOMPILED_ICNS "${CMAKE_CURRENT_SOURCE_DIR}/icons/AppIcon-compiled.icns")
-if(EXISTS "${PRECOMPILED_ASSETS_CAR}" AND NOT BUILD_CLI_ONLY)
-    message(STATUS "Found pre-compiled icon Assets.car: ${PRECOMPILED_ASSETS_CAR}")
-    message(STATUS "Will install pre-compiled icons for Liquid Glass support on macOS Tahoe+")
-    
+if(EXISTS "${PRECOMPILED_ICNS}" AND NOT BUILD_CLI_ONLY)
+    message(STATUS "Installing EVE-Imager icon: ${PRECOMPILED_ICNS}")
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E echo "Installing pre-compiled icon assets for Liquid Glass..."
-        # Remove Qt's Assets.car - replace with our pre-compiled version containing AppIcon
+        COMMAND ${CMAKE_COMMAND} -E echo "Installing EVE-Imager icon..."
+        # Remove any Qt-generated or leftover Assets.car so it cannot override AppIcon.icns
         COMMAND ${CMAKE_COMMAND} -E remove -f "${APP_BUNDLE_PATH}/Contents/Resources/Assets.car"
-        # Remove any stale .icon copies from previous build attempts
+        # Remove any stale .icon directories from previous builds
         COMMAND ${CMAKE_COMMAND} -E remove_directory "${APP_BUNDLE_PATH}/Contents/Resources/app_icon_macos.icon"
         COMMAND ${CMAKE_COMMAND} -E remove_directory "${APP_BUNDLE_PATH}/Contents/Resources/AppIcon.icon"
-        # Copy pre-compiled Assets.car (contains all icon variants for Liquid Glass)
-        COMMAND ${CMAKE_COMMAND} -E copy 
-            "${PRECOMPILED_ASSETS_CAR}"
-            "${APP_BUNDLE_PATH}/Contents/Resources/Assets.car"
-        # Copy pre-compiled icns for legacy fallback (named AppIcon.icns to match CFBundleIconFile)
-        COMMAND ${CMAKE_COMMAND} -E copy 
+        # Install the EVE-Imager .icns (named AppIcon.icns to match CFBundleIconFile)
+        COMMAND ${CMAKE_COMMAND} -E copy
             "${PRECOMPILED_ICNS}"
             "${APP_BUNDLE_PATH}/Contents/Resources/AppIcon.icns"
-        COMMENT "Installing pre-compiled icon assets for Liquid Glass support"
+        COMMENT "Installing EVE-Imager icon (AppIcon.icns)"
     )
 endif()
 
