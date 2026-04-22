@@ -156,6 +156,16 @@ WizardStepBase {
 
                     Item { height: Style.spacingSmall }
 
+                    // Show all / LTS-only toggle
+                    CheckBox {
+                        id: showAllVersionsCheck
+                        text: qsTr("Show all versions (including non-LTS)")
+                        checked: releaseFetcher.showNonLts
+                        font.family: Style.fontFamily
+                        font.pointSize: Style.fontSizeFormLabel
+                        onCheckedChanged: releaseFetcher.showNonLts = checked
+                    }
+
                     // Loading / error banner
                     Rectangle {
                         id: statusBanner

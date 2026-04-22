@@ -10,9 +10,11 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <algorithm>
 
+// Fetch up to 100 releases per page (GitHub API maximum).
 static const char *RELEASES_URL =
-    "https://api.github.com/repos/lf-edge/eve/releases?per_page=50";
+    "https://api.github.com/repos/lf-edge/eve/releases?per_page=100";
 
 // ── Constructor ───────────────────────────────────────────────────────────────
 
@@ -31,11 +33,30 @@ void EveReleaseFetcher::setLoading(bool v)
     emit loadingChanged();
 }
 
+void EveReleaseFetcher::setFetchFailed(bool v)
+{
+    if (_fetchFailed == v) return;
+    _fetchFailed = v;
+    emit fetchFailedChanged();
+}
+
 void EveReleaseFetcher::setStatusMessage(const QString &msg)
 {
     if (_statusMessage == msg) return;
     _statusMessage = msg;
     emit statusMessageChanged();
+}
+
+// ── showNonLts property ───────────────────────────────────────────────────────
+
+void EveReleaseFetcher::setShowNonLts(bool v)
+{
+    if (_showNonLts == v) return;
+    _showNonLts = v;
+    emit showNonLtsChanged();
+    // Re-emit releasesReady so the QML version combo model is refreshed
+    if (!_releases.isEmpty())
+        emit releasesReady();
 }
 
 // ── Network fetch ─────────────────────────────────────────────────────────────
@@ -45,6 +66,7 @@ void EveReleaseFetcher::fetchReleases()
     if (_loading) return;     // Don't overlap fetches
 
     setLoading(true);
+    setFetchFailed(false);
     setStatusMessage(tr("Loading releases…"));
     _releases.clear();
 
@@ -62,9 +84,11 @@ void EveReleaseFetcher::onFetchFinished(const QByteArray &data,
     setLoading(false);
 
     if (_releases.isEmpty()) {
+        setFetchFailed(true);
         setStatusMessage(tr("No EVE OS releases found"));
         emit fetchFailed(tr("No installer assets found in the EVE OS GitHub releases"));
     } else {
+        setFetchFailed(false);
         setStatusMessage(tr("Ready — %1 releases available").arg(_releases.size()));
         emit releasesReady();
     }
@@ -73,6 +97,7 @@ void EveReleaseFetcher::onFetchFinished(const QByteArray &data,
 void EveReleaseFetcher::onFetchError(const QString &errorMessage, const QUrl & /*url*/)
 {
     setLoading(false);
+    setFetchFailed(true);
     setStatusMessage(tr("Error: %1").arg(errorMessage));
     qWarning() << "EveReleaseFetcher: fetch error:" << errorMessage;
     emit fetchFailed(errorMessage);
@@ -102,12 +127,20 @@ void EveReleaseFetcher::parseReleases(const QByteArray &json)
         if (ro["draft"].toBool() || ro["prerelease"].toBool())
             continue;
 
-        QString version = ro["tag_name"].toString().trimmed();
-        if (version.isEmpty())
+        QString tagName = ro["tag_name"].toString().trimmed();
+        if (tagName.isEmpty())
             continue;
 
+        // Detect LTS: tag or release title contains "lts" (case-insensitive)
+        QString releaseName = ro["name"].toString();
+        bool isLts = tagName.contains(QLatin1String("lts"), Qt::CaseInsensitive)
+                  || releaseName.contains(QLatin1String("lts"), Qt::CaseInsensitive);
+
+        // Parse publication date for chronological sorting
+        QDateTime publishedAt = QDateTime::fromString(
+            ro["published_at"].toString(), Qt::ISODate);
+
         // Collect installer assets (.raw preferred, .iso as fallback)
-        // First pass: collect all candidates, then deduplicate preferring .raw over .iso
         QList<AssetInfo> assets;
         const QJsonArray assetArr = ro["assets"].toArray();
         for (const QJsonValue &av : assetArr) {
@@ -171,10 +204,18 @@ void EveReleaseFetcher::parseReleases(const QByteArray &json)
             continue;   // No installer images for this release — skip
 
         ReleaseInfo rel;
-        rel.version = version;
-        rel.assets  = assets;
+        rel.version     = tagName;
+        rel.publishedAt = publishedAt;
+        rel.isLts       = isLts;
+        rel.assets      = assets;
         _releases.append(rel);
     }
+
+    // Sort by publication date, newest first
+    std::sort(_releases.begin(), _releases.end(),
+              [](const ReleaseInfo &a, const ReleaseInfo &b) {
+                  return a.publishedAt > b.publishedAt;
+              });
 
     qDebug() << "EveReleaseFetcher: parsed" << _releases.size() << "releases";
 }
@@ -183,11 +224,31 @@ void EveReleaseFetcher::parseReleases(const QByteArray &json)
 
 QStringList EveReleaseFetcher::versions() const
 {
+    // Check whether any LTS releases exist at all
+    bool anyLts = false;
+    for (const ReleaseInfo &r : _releases) {
+        if (r.isLts) { anyLts = true; break; }
+    }
+
     QStringList result;
     result.reserve(_releases.size());
-    for (const ReleaseInfo &r : _releases)
+    for (const ReleaseInfo &r : _releases) {
+        // When showNonLts is off AND lts releases exist, filter to lts only.
+        // If no lts releases are detected, show everything as a safe fallback.
+        if (!_showNonLts && anyLts && !r.isLts)
+            continue;
         result.append(r.version);
+    }
     return result;
+}
+
+bool EveReleaseFetcher::isLtsVersion(const QString &version) const
+{
+    for (const ReleaseInfo &r : _releases) {
+        if (r.version == version)
+            return r.isLts;
+    }
+    return false;
 }
 
 // ── Cascading combo helpers ───────────────────────────────────────────────────

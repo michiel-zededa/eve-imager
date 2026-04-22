@@ -13,6 +13,8 @@
  * Files written by this class (all optional):
  *   - server                          if controllerUrl is set
  *   - root-certificate.pem            if rootCertPath is set
+ *   - onboard.cert.pem                if onboardCertPath is set
+ *   - onboard.key.pem                 if onboardKeyPath is set
  *   - DevicePortConfig/override.json  if networkMode=="static", proxyUrl,
  *                                     or wifiSsid is set
  *   - authorized_keys                 if authorizedKeys is set

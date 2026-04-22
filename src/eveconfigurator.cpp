@@ -213,6 +213,32 @@ bool EveConfigurator::apply(DeviceWrapper &dw, const QVariantMap &config)
         anyWritten = true;
     }
 
+    // `onboard.cert.pem` — onboarding certificate
+    QString certPath = config.value("onboardCertPath").toString().trimmed();
+    if (!certPath.isEmpty()) {
+        QFile f(certPath);
+        if (f.open(QIODevice::ReadOnly)) {
+            fat->writeFile("onboard.cert.pem", f.readAll());
+            qDebug() << "EveConfigurator: wrote onboard.cert.pem from" << certPath;
+            anyWritten = true;
+        } else {
+            qWarning() << "EveConfigurator: cannot read cert file" << certPath;
+        }
+    }
+
+    // `onboard.key.pem` — onboarding private key
+    QString keyPath = config.value("onboardKeyPath").toString().trimmed();
+    if (!keyPath.isEmpty()) {
+        QFile f(keyPath);
+        if (f.open(QIODevice::ReadOnly)) {
+            fat->writeFile("onboard.key.pem", f.readAll());
+            qDebug() << "EveConfigurator: wrote onboard.key.pem from" << keyPath;
+            anyWritten = true;
+        } else {
+            qWarning() << "EveConfigurator: cannot read key file" << keyPath;
+        }
+    }
+
     // `authorized_keys` — SSH public key for debug console access
     QString authorizedKeys = config.value("authorizedKeys").toString().trimmed();
     if (!authorizedKeys.isEmpty()) {

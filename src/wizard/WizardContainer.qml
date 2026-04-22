@@ -114,6 +114,8 @@ Item {
         wifiSsid:           "",   // WiFi SSID
         wifiPassword:       "",   // WiFi pre-shared key
         rootCertPath:       "",   // root-certificate.pem (controller CA)
+        onboardCertPath:    "",   // onboard.cert.pem
+        onboardKeyPath:     "",   // onboard.key.pem
         authorizedKeys:     "",   // authorized_keys (SSH public key text)
         installDisk:        "",   // eve_install_disk grub param
         persistDisk:        "",   // eve_persist_disk grub param

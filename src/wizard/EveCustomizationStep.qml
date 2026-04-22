@@ -102,30 +102,90 @@ WizardStepBase {
                             }
                         }
 
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: Style.spacingSmall
-                            WizardFormLabel {
-                                text: qsTr("Controller CA cert")
-                                Layout.preferredWidth: Style.scaled(140)
-                            }
-                            ImTextField {
-                                id: rootCertField
-                                Layout.fillWidth: true
-                                readOnly: true
-                                placeholderText: qsTr("root-certificate.pem  (optional)")
-                                text: root.wizardContainer.eveConfig.rootCertPath
-                            }
-                            ImButton {
-                                text: qsTr("Browse…")
-                                onClicked: rootCertPicker.open()
-                            }
+                        // ── Advanced toggle ───────────────────────────────────
+                        CheckBox {
+                            id: showAdvancedCerts
+                            text: qsTr("Advanced certificate options")
+                            checked: false
+                            font.family: Style.fontFamily
+                            font.pointSize: Style.fontSizeFormLabel
+                            Layout.topMargin: Style.spacingSmall
                         }
 
-                        WizardDescriptionText {
-                            text: qsTr("The CA certificate used to verify TLS connections to your controller. "
-                                       + "Required for self-hosted or private controller deployments.")
+                        // ── Advanced: CA cert + onboarding certs ──────────────
+                        ColumnLayout {
                             Layout.fillWidth: true
+                            spacing: Style.formRowSpacing
+                            visible: showAdvancedCerts.checked
+
+                            // Subtle separator
+                            Rectangle {
+                                Layout.fillWidth: true
+                                height: 1
+                                color: Style.inputBorderColor
+                                opacity: 0.5
+                            }
+
+                            WizardDescriptionText {
+                                text: qsTr("Controller CA certificate — required only for self-hosted or private controller deployments. "
+                                           + "Onboarding certificates allow pre-provisioning a device with a known identity; "
+                                           + "the certificate must be pre-registered in your controller.")
+                                Layout.fillWidth: true
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: Style.spacingSmall
+                                WizardFormLabel {
+                                    text: qsTr("Controller CA cert")
+                                    Layout.preferredWidth: Style.scaled(140)
+                                }
+                                ImTextField {
+                                    id: rootCertField
+                                    Layout.fillWidth: true
+                                    readOnly: true
+                                    placeholderText: qsTr("root-certificate.pem  (optional)")
+                                    text: root.wizardContainer.eveConfig.rootCertPath
+                                }
+                                ImButton {
+                                    text: qsTr("Browse…")
+                                    onClicked: rootCertPicker.open()
+                                }
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: Style.spacingSmall
+                                WizardFormLabel {
+                                    text: qsTr("Onboard cert (.pem)")
+                                    Layout.preferredWidth: Style.scaled(140)
+                                }
+                                ImTextField {
+                                    id: certPathField
+                                    Layout.fillWidth: true
+                                    readOnly: true
+                                    placeholderText: qsTr("onboard.cert.pem  (optional)")
+                                    text: root.wizardContainer.eveConfig.onboardCertPath
+                                }
+                                ImButton { text: qsTr("Browse…"); onClicked: certFilePicker.open() }
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: Style.spacingSmall
+                                WizardFormLabel {
+                                    text: qsTr("Onboard key (.pem)")
+                                    Layout.preferredWidth: Style.scaled(140)
+                                }
+                                ImTextField {
+                                    id: keyPathField
+                                    Layout.fillWidth: true
+                                    readOnly: true
+                                    placeholderText: qsTr("onboard.key.pem  (optional)")
+                                    text: root.wizardContainer.eveConfig.onboardKeyPath
+                                }
+                                ImButton { text: qsTr("Browse…"); onClicked: keyFilePicker.open() }
+                            }
                         }
                     }
                 }
@@ -426,6 +486,32 @@ WizardStepBase {
             var path = selectedFile.toString().replace(/^(file:\/{2,3})/, "")
             root.setCfg("rootCertPath", path)
             rootCertField.text = path
+        }
+    }
+
+    ImFileDialog {
+        id: certFilePicker
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        title: qsTr("Select onboarding certificate")
+        nameFilters: ["PEM files (*.pem *.crt)", "All files (*)"]
+        onAccepted: {
+            var path = selectedFile.toString().replace(/^(file:\/{2,3})/, "")
+            root.setCfg("onboardCertPath", path)
+            certPathField.text = path
+        }
+    }
+
+    ImFileDialog {
+        id: keyFilePicker
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        title: qsTr("Select onboarding private key")
+        nameFilters: ["PEM files (*.pem *.key)", "All files (*)"]
+        onAccepted: {
+            var path = selectedFile.toString().replace(/^(file:\/{2,3})/, "")
+            root.setCfg("onboardKeyPath", path)
+            keyPathField.text = path
         }
     }
 
