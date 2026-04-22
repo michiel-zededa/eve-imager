@@ -2,7 +2,7 @@
 
 A graphical tool for writing [LF Edge EVE OS](https://github.com/lf-edge/eve) installer images to USB drives. Built on top of [Raspberry Pi Imager](https://github.com/raspberrypi/rpi-imager).
 
-EVE-Imager downloads EVE OS releases directly from GitHub, lets you configure device settings (controller URL, network, certificates), writes the image to a USB drive, and verifies the result — all in one guided workflow.
+EVE-Imager downloads EVE OS releases directly from GitHub, lets you configure device settings (controller URL, network, WiFi), writes the image to a USB drive, and verifies the result — all in one guided workflow.
 
 ---
 
@@ -15,8 +15,7 @@ EVE-Imager downloads EVE OS releases directly from GitHub, lets you configure de
   - Controller URL and custom CA certificate
   - Network mode: DHCP or static IP (address, gateway, DNS)
   - HTTP/HTTPS proxy
-  - Onboarding certificate and key
-  - Device serial number (soft serial)
+  - WiFi (SSID and WPA2 password)
   - SSH public key for debug console access
   - Target install disk and separate `/persist` disk
   - Auto-reboot after installation
@@ -112,19 +111,11 @@ When you fill in the Configuration step, EVE-Imager writes the following files t
 | `server` | Controller hostname, e.g. `zedcloud.example.zededa.net` |
 | `root-certificate.pem` | CA certificate used to verify TLS connections to the controller. Required for self-hosted or private controller deployments. |
 
-### Networking
+### Networking / WiFi
 
 | File | Description |
 |---|---|
-| `DevicePortConfig/override.json` | Network port configuration. Written when static IP or a proxy is configured; omitted for plain DHCP. |
-
-### Device identity
-
-| File | Description |
-|---|---|
-| `onboard.cert.pem` | Onboarding certificate — must be pre-registered in the controller. |
-| `onboard.key.pem` | Matching onboarding private key. |
-| `soft_serial` | Software-defined serial number sent to the controller at registration. Used to pre-provision or auto-approve a device. |
+| `DevicePortConfig/override.json` | Network port configuration. Written when static IP, a proxy, or a WiFi network is configured; omitted for plain wired DHCP. Includes a `wlan0` port with WPA2 credentials when an SSID is provided. |
 
 ### SSH access
 
