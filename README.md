@@ -8,17 +8,19 @@ EVE-Imager downloads EVE OS releases directly from GitHub, lets you configure de
 
 ## Features
 
-- **Live release browser** — fetches available EVE OS versions directly from the [lf-edge/eve GitHub releases](https://github.com/lf-edge/eve/releases); no manual URL hunting required
+- **Live release browser** — fetches up to 100 EVE OS releases directly from [lf-edge/eve GitHub releases](https://github.com/lf-edge/eve/releases), sorted by date with the newest on top
+- **LTS filter** — shows only LTS releases by default; tick "Show all versions" to include current/non-LTS releases as well
 - **Cascading selection** — choose Version → Architecture → Hypervisor → Platform; only combinations that actually have installer assets are shown
 - **Raw and ISO support** — prefers `.installer.raw` images; falls back to `.installer.iso` when only an ISO is available for a combination
 - **Device configuration** — optionally pre-configure the device before writing:
-  - Controller URL and custom CA certificate
+  - Controller URL
   - Network mode: DHCP or static IP (address, gateway, DNS)
   - HTTP/HTTPS proxy
   - WiFi (SSID and WPA2 password)
   - SSH public key for debug console access
   - Target install disk and separate `/persist` disk
   - Auto-reboot after installation
+  - _Advanced:_ Controller CA certificate, onboarding certificate and private key
 - **Local image support** — bypass the GitHub release browser and write a locally downloaded `.raw` file instead
 - **Write + verify** — streams the download directly to the USB device and verifies the written data afterwards
 - **5-step wizard** — Version → Storage → Configuration → Write → Done
@@ -74,7 +76,7 @@ Build with CMake + Qt 6 via the Qt Online Installer. Run as Administrator (raw d
 
 ## Usage
 
-1. **Version** — Select an EVE OS version from the dropdown (loaded live from GitHub). Choose architecture, hypervisor, and platform. Or switch to the _Use local image file_ tab to pick a `.raw` file you already have.
+1. **Version** — Select an EVE OS version from the dropdown (loaded live from GitHub, newest first). LTS releases are shown by default; tick **Show all versions** to include non-LTS releases. Choose architecture, hypervisor, and platform. Or switch to the _Use local image file_ tab to pick a `.raw` or `.iso` file you already have.
 
 2. **Storage** — Select the target USB drive. Double-check the device name and size before continuing.
 
@@ -109,7 +111,14 @@ When you fill in the Configuration step, EVE-Imager writes the following files t
 | File | Description |
 |---|---|
 | `server` | Controller hostname, e.g. `zedcloud.example.zededa.net` |
+
+**Advanced certificate options** (hidden by default — expand with the checkbox in the UI):
+
+| File | Description |
+|---|---|
 | `root-certificate.pem` | CA certificate used to verify TLS connections to the controller. Required for self-hosted or private controller deployments. |
+| `onboard.cert.pem` | Onboarding certificate — must be pre-registered in the controller before the device boots. |
+| `onboard.key.pem` | Matching onboarding private key. |
 
 ### Networking / WiFi
 
