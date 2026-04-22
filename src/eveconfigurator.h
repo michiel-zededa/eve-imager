@@ -2,22 +2,22 @@
  * SPDX-License-Identifier: Apache-2.0
  * Copyright (C) 2025 ZEDEDA, Inc.
  *
- * EveConfigurator — writes EVE OS config files into the CONFIG FAT partition
+ * EveConfigurator -- writes EVE OS config files into the CONFIG FAT partition
  * of an already-written installer image.
  *
  * The CONFIG partition is identified by GPT partition name "CONFIG".
- * It is a 1 MB FAT16 filesystem and always contains at minimum:
+ * It is a 1 MB FAT partition and always contains at minimum:
  *   - DevicePortConfig/   (directory)
- *   - onboard.cert.pem    (default placeholder)
- *   - onboard.key.pem     (default placeholder)
  *   - server              (default empty or zedcloud URL)
  *
- * Files written by this class:
+ * Files written by this class (all optional):
  *   - server                          if controllerUrl is set
- *   - DevicePortConfig/override.json  if networkMode=="static" or proxyUrl set
- *   - onboard.cert.pem                if onboardCertPath is set
- *   - onboard.key.pem                 if onboardKeyPath is set
- *   - soft_serial                     if deviceSerial is set
+ *   - root-certificate.pem            if rootCertPath is set
+ *   - DevicePortConfig/override.json  if networkMode=="static", proxyUrl,
+ *                                     or wifiSsid is set
+ *   - authorized_keys                 if authorizedKeys is set
+ *   - grub.cfg                        if installDisk, persistDisk, or
+ *                                     rebootAfterInstall is set
  */
 
 #ifndef EVECONFIGURATOR_H
@@ -36,16 +36,20 @@ public:
      * Apply EVE config to a DeviceWrapper that wraps the destination device
      * (after the installer image has been written to it).
      *
-     * config keys (all optional strings):
-     *   controllerUrl   — EVE controller FQDN, e.g. "zedcloud.zededa.net"
-     *   networkMode     — "dhcp" (default) | "static"
-     *   staticIp        — CIDR, e.g. "192.168.1.100/24"  (static only)
-     *   gateway         — e.g. "192.168.1.1"              (static only)
-     *   dns             — comma-separated, e.g. "8.8.8.8" (static only)
-     *   proxyUrl        — e.g. "http://proxy.example.com:3128"
-     *   onboardCertPath — local filesystem path to onboard.cert.pem
-     *   onboardKeyPath  — local filesystem path to onboard.key.pem
-     *   deviceSerial    — soft serial string
+     * config keys (all optional):
+     *   controllerUrl      - EVE controller FQDN, e.g. "zedcloud.zededa.net"
+     *   rootCertPath       - local path to controller CA certificate (.pem)
+     *   networkMode        - "dhcp" (default) | "static"
+     *   staticIp           - CIDR, e.g. "192.168.1.100/24"  (static only)
+     *   gateway            - e.g. "192.168.1.1"              (static only)
+     *   dns                - comma-separated, e.g. "8.8.8.8" (static only)
+     *   proxyUrl           - e.g. "http://proxy.example.com:3128"
+     *   wifiSsid           - WiFi network SSID
+     *   wifiPassword       - WiFi WPA2 pre-shared key
+     *   authorizedKeys     - SSH public key text for authorized_keys
+     *   installDisk        - Linux device name, e.g. "nvme0n1"
+     *   persistDisk        - Linux device name for /persist, e.g. "sda"
+     *   rebootAfterInstall - bool, add eve_reboot_after_install to grub.cfg
      *
      * Returns true if any files were written, false on error (throws on hard error).
      */
