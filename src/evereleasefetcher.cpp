@@ -131,10 +131,28 @@ void EveReleaseFetcher::parseReleases(const QByteArray &json)
         if (tagName.isEmpty())
             continue;
 
-        // Detect LTS: tag or release title contains "lts" (case-insensitive)
+        // Detect LTS:
+        // 1. Explicit: tag or release title contains "lts"
+        // 2. Heuristic: even minor version (X.Y.Z where Y is even).
+        //    EVE follows the common convention that even minor = LTS,
+        //    odd minor = current/edge (e.g. 12.0.x, 12.2.x are LTS;
+        //    12.1.x, 12.3.x are current releases).
         QString releaseName = ro["name"].toString();
         bool isLts = tagName.contains(QLatin1String("lts"), Qt::CaseInsensitive)
                   || releaseName.contains(QLatin1String("lts"), Qt::CaseInsensitive);
+        if (!isLts) {
+            // Strip leading 'v' prefix if present, then parse X.Y.Z
+            QString ver = tagName;
+            if (ver.startsWith(QLatin1Char('v')) || ver.startsWith(QLatin1Char('V')))
+                ver = ver.mid(1);
+            const QStringList parts = ver.split(QLatin1Char('.'));
+            if (parts.size() >= 2) {
+                bool ok = false;
+                int minor = parts.at(1).toInt(&ok);
+                if (ok && (minor % 2 == 0))
+                    isLts = true;
+            }
+        }
 
         // Parse publication date for chronological sorting
         QDateTime publishedAt = QDateTime::fromString(

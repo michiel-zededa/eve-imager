@@ -146,20 +146,19 @@ QByteArray EveConfigurator::buildOverrideJson(const QVariantMap &config)
     if (needsWifi) {
         QJsonObject wifiEntry;
         wifiEntry["SSID"]      = wifiSsid;
-        wifiEntry["KeyScheme"] = 2; // WPA-PSK
+        wifiEntry["KeyScheme"] = 1; // WifiKeySchemeWpaPsk = 1 in EVE's Go enum
         if (!wifiPass.isEmpty())
             wifiEntry["Password"] = wifiPass;
 
         QJsonObject wirelessCfg;
-        wirelessCfg["WType"] = 1; // WiFi
+        wirelessCfg["WType"] = 2; // WirelessTypeWifi = 2 (1 = Cellular, 0 = None)
         wirelessCfg["Wifi"]  = QJsonArray{ wifiEntry };
 
         QJsonObject wifiPort;
-        wifiPort["Free"]        = true;
         wifiPort["IfName"]      = "wlan0";
-        wifiPort["Name"]        = "WiFi";
         wifiPort["IsMgmt"]      = true;
-        wifiPort["Dhcp"]        = 4; // DHCP
+        wifiPort["IsL3Port"]    = true;
+        wifiPort["Dhcp"]        = 4; // DhcpTypeClient = 4
         wifiPort["WirelessCfg"] = wirelessCfg;
 
         ports.append(wifiPort);

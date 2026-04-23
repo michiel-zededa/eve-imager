@@ -7,6 +7,7 @@
 
 pragma ComponentBehavior: Bound
 
+import QtCore
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -19,6 +20,9 @@ WizardStepBase {
 
     required property ImageWriter imageWriter
     required property var wizardContainer
+
+    // Track the filename of the last SSH key file loaded from disk
+    property string _sshKeyFilename: ""
 
     title: qsTr("Device configuration (optional)")
     subtitle: qsTr("Everything on this page is optional — skip it entirely to write a plain EVE OS image. Any values you fill in will be written to the config partition on the USB drive before it is ejected.")
@@ -401,6 +405,17 @@ WizardStepBase {
                                 Layout.alignment: Qt.AlignTop
                             }
                         }
+
+                        Text {
+                            visible: root._sshKeyFilename.length > 0
+                            text: qsTr("Loaded from: %1").arg(root._sshKeyFilename)
+                            font.family: Style.fontFamily
+                            font.pointSize: Style.fontSizeDescription
+                            font.italic: true
+                            color: Style.textDescriptionColor
+                            Layout.fillWidth: true
+                            elide: Text.ElideMiddle
+                        }
                     }
                 }
 
@@ -482,6 +497,7 @@ WizardStepBase {
         anchors.centerIn: parent
         title: qsTr("Select controller CA certificate")
         nameFilters: ["PEM / CRT files (*.pem *.crt)", "All files (*)"]
+        showHiddenFiles: true
         onAccepted: {
             var path = selectedFile.toString().replace(/^(file:\/{2,3})/, "")
             root.setCfg("rootCertPath", path)
@@ -495,6 +511,7 @@ WizardStepBase {
         anchors.centerIn: parent
         title: qsTr("Select onboarding certificate")
         nameFilters: ["PEM files (*.pem *.crt)", "All files (*)"]
+        showHiddenFiles: true
         onAccepted: {
             var path = selectedFile.toString().replace(/^(file:\/{2,3})/, "")
             root.setCfg("onboardCertPath", path)
@@ -508,6 +525,7 @@ WizardStepBase {
         anchors.centerIn: parent
         title: qsTr("Select onboarding private key")
         nameFilters: ["PEM files (*.pem *.key)", "All files (*)"]
+        showHiddenFiles: true
         onAccepted: {
             var path = selectedFile.toString().replace(/^(file:\/{2,3})/, "")
             root.setCfg("onboardKeyPath", path)
@@ -521,7 +539,12 @@ WizardStepBase {
         anchors.centerIn: parent
         title: qsTr("Select SSH public key")
         nameFilters: ["Public key files (*.pub)", "All files (*)"]
+        showHiddenFiles: true
+        // Open directly in ~/.ssh so the user sees their keys immediately
+        currentFolder: StandardPaths.writableLocation(StandardPaths.HomeLocation) + "/.ssh"
         onAccepted: {
+            var path = selectedFile.toString().replace(/^(file:\/{2,3})/, "")
+            root._sshKeyFilename = path.split("/").pop()
             var xhr = new XMLHttpRequest()
             xhr.open("GET", selectedFile.toString())
             xhr.onreadystatechange = function() {
