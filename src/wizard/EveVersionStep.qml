@@ -46,7 +46,6 @@ WizardStepBase {
 
         onReleasesReady: {
             // Restore prior version selection after a fetch (initial load only).
-            // Filter changes are handled by onShowNonLtsChanged below.
             var savedVersion = root.wizardContainer.eveVersion
             if (savedVersion.length > 0) {
                 var idx = releaseFetcher.versions.indexOf(savedVersion)
@@ -59,15 +58,6 @@ WizardStepBase {
                 versionCombo.currentIndex = 0
             }
             root._refreshArchModel()
-        }
-
-        onShowNonLtsChanged: {
-            // Reset to the newest release in the current filter so the user
-            // gets clear visual feedback that the list changed.
-            if (releaseFetcher.versions.length > 0) {
-                versionCombo.currentIndex = 0
-                root._refreshArchModel()
-            }
         }
 
         onFetchFailed: function(msg) {
@@ -165,16 +155,6 @@ WizardStepBase {
                     spacing: Style.formRowSpacing
 
                     Item { height: Style.spacingSmall }
-
-                    // Show all / LTS-only toggle
-                    CheckBox {
-                        id: showAllVersionsCheck
-                        text: qsTr("Show all versions (including non-LTS)")
-                        checked: releaseFetcher.showNonLts
-                        font.family: Style.fontFamily
-                        font.pointSize: Style.fontSizeFormLabel
-                        onCheckedChanged: releaseFetcher.showNonLts = checked
-                    }
 
                     // Loading / error banner
                     Rectangle {
