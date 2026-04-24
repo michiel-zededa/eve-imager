@@ -45,7 +45,8 @@ WizardStepBase {
         id: releaseFetcher
 
         onReleasesReady: {
-            // Restore prior version selection after a fetch
+            // Restore prior version selection after a fetch (initial load only).
+            // Filter changes are handled by onShowNonLtsChanged below.
             var savedVersion = root.wizardContainer.eveVersion
             if (savedVersion.length > 0) {
                 var idx = releaseFetcher.versions.indexOf(savedVersion)
@@ -58,6 +59,15 @@ WizardStepBase {
                 versionCombo.currentIndex = 0
             }
             root._refreshArchModel()
+        }
+
+        onShowNonLtsChanged: {
+            // Reset to the newest release in the current filter so the user
+            // gets clear visual feedback that the list changed.
+            if (releaseFetcher.versions.length > 0) {
+                versionCombo.currentIndex = 0
+                root._refreshArchModel()
+            }
         }
 
         onFetchFailed: function(msg) {

@@ -100,7 +100,7 @@ Item {
     property string eveLocalImagePath: ""     // set when user picks a local .raw file
     property bool   useLocalImage: false
     property string eveDownloadUrl: ""        // resolved by EveVersionStep.syncState()
-    property int    eveDownloadSize: 0        // file size in bytes (for progress bar)
+    property double eveDownloadSize: 0        // file size in bytes (for progress bar, double avoids int32 overflow)
     property bool   eveIsIsoImage: false      // true = ISO asset (no config customization)
 
     // ── EVE device configuration ──────────────────────────────────────────
