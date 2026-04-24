@@ -9,7 +9,7 @@ EVE-Imager downloads EVE OS releases directly from GitHub, lets you configure de
 ## Features
 
 - **Live release browser** — fetches up to 100 EVE OS releases directly from [lf-edge/eve GitHub releases](https://github.com/lf-edge/eve/releases), sorted by date with the newest on top
-- **LTS filter** — shows only LTS releases by default; LTS is detected by an even minor version number (e.g. 12.0.x, 12.2.x are LTS; 12.1.x, 12.3.x are non-LTS/current); tick "Show all versions" to include non-LTS releases as well
+- **LTS filter** — shows only LTS releases; LTS is detected by an even minor version number (e.g. 12.0.x, 12.2.x are LTS; 12.1.x, 12.3.x are non-LTS/current); use the _Use local image file_ tab if you need a non-LTS build
 - **Cascading selection** — choose Version → Architecture → Hypervisor → Platform; only combinations that actually have installer assets are shown
 - **Raw and ISO support** — prefers `.installer.raw` images; falls back to `.installer.iso` when only an ISO is available for a combination
 - **Device configuration** — optionally pre-configure the device before writing:
@@ -76,7 +76,7 @@ Build with CMake + Qt 6 via the Qt Online Installer. Run as Administrator (raw d
 
 ## Usage
 
-1. **Version** — Select an EVE OS version from the dropdown (loaded live from GitHub, newest first). LTS releases are shown by default (detected by even minor version number — e.g. 12.0.x, 12.2.x); tick **Show all versions** to include non-LTS releases. Choose architecture, hypervisor, and platform. Or switch to the _Use local image file_ tab to pick a `.raw` or `.iso` file you already have.
+1. **Version** — Select an EVE OS version from the dropdown (loaded live from GitHub, newest first). Only LTS releases are shown (even minor version number — e.g. 12.0.x, 12.2.x). Choose architecture, hypervisor, and platform. Or switch to the _Use local image file_ tab to pick a `.raw` or `.iso` file you already have (useful for non-LTS builds).
 
 2. **Storage** — Select the target USB drive. Double-check the device name and size before continuing.
 
