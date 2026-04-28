@@ -186,6 +186,11 @@ Item {
             writeAnotherMode = false
         }
 
+        // ISO images: skip the customization step — config cannot be applied to ISOs
+        if (next === stepEveCustomization && root.eveIsIsoImage) {
+            next = stepWriting
+        }
+
         markStepPermissible(next)
         root.currentStep = next
         var comp = getStepComponent(next)
@@ -194,8 +199,15 @@ Item {
 
     function previousStep() {
         if (root.currentStep <= 0) return
-        root.currentStep--
-        var comp = getStepComponent(root.currentStep)
+        var prev = root.currentStep - 1
+
+        // ISO images: skip back over the customization step
+        if (prev === stepEveCustomization && root.eveIsIsoImage) {
+            prev = stepStorageSelection
+        }
+
+        root.currentStep = prev
+        var comp = getStepComponent(prev)
         if (comp) { wizardStack.clear(); wizardStack.push(comp) }
     }
 

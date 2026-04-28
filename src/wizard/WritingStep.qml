@@ -176,6 +176,36 @@ WizardStepBase {
             }
         }
 
+        // ISO notice — shown when writing an ISO (no config applied)
+        Rectangle {
+            id: isoNotice
+            Layout.fillWidth: true
+            Layout.maximumWidth: Style.sectionMaxWidth
+            Layout.alignment: Qt.AlignHCenter
+            color: "#fff3cd"
+            border.color: "#ffc107"
+            border.width: 1
+            radius: Style.sectionBorderRadius
+            height: isoNoticeText.implicitHeight + Style.spacingSmall * 2
+            visible: !root.isWriting && !root.isComplete && !root.hasFailed
+                     && root.wizardContainer.eveIsIsoImage
+
+            Text {
+                id: isoNoticeText
+                anchors {
+                    left: parent.left; right: parent.right
+                    top: parent.top; margins: Style.spacingSmall
+                }
+                text: qsTr("⚠ ISO image — controller URL, network, and SSH settings cannot be "
+                            + "pre-configured on ISO installers. The image will boot as a plain "
+                            + "installer. Configure the device through the controller after installation.")
+                font.family: Style.fontFamily
+                font.pointSize: Style.fontSizeDescription
+                color: "#856404"
+                wrapMode: Text.WordWrap
+            }
+        }
+
         // Customization summary (what will be written) - de-chromed
         ColumnLayout {
             id: customLayout
@@ -702,7 +732,12 @@ WizardStepBase {
             var dlUrl = "https://github.com/lf-edge/eve/releases/download/" + cfg.eveVersion + "/" + assetName
             root.imageWriter.setSrc(dlUrl, 0, 0, "", false, "EVE OS", cfg.selectedOsName)
         }
-        root.imageWriter.setEveConfig(cfg.eveConfig)
+        // Don't pass EVE config for ISO images — ISOs have no CONFIG partition
+        if (!cfg.eveIsIsoImage) {
+            root.imageWriter.setEveConfig(cfg.eveConfig)
+        } else {
+            root.imageWriter.setEveConfig({})
+        }
         root._srcReady = true    // unblock the Write button binding
 
         // Register summary section as first focus group
