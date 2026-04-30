@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 220">
+  <!--
+    EVE logo: teal wordmark with three connected letterforms.
+    Left reversed-E, centre downward-V, right E — all joined at mid-height.
+    Color: #3DBFBF (ZEDEDA teal)
+  -->
+  <g fill="#3DBFBF">
+    <!-- ═══ Left reversed-E (top bar, mid bar, bottom bar + vertical spine) ═══ -->
+    <!-- Top bar -->
+    <rect x="60"  y="20"  width="140" height="36"/>
+    <!-- Mid bar (shared with V left arm) -->
+    <rect x="60"  y="92"  width="100" height="36"/>
+    <!-- Bottom bar -->
+    <rect x="60"  y="164" width="140" height="36"/>
+    <!-- Vertical spine -->
+    <rect x="60"  y="20"  width="36"  height="180"/>
+
+    <!-- ═══ Centre V (downward-pointing chevron) ═══ -->
+    <!-- Left arm of V: descends from top-left to centre-bottom -->
+    <polygon points="160,56  200,56  280,164  240,164"/>
+    <!-- Right arm of V: descends from top-right to centre-bottom -->
+    <polygon points="360,56  400,56  320,164  280,164"/>
+
+    <!-- ═══ Right E (top bar, mid bar, bottom bar + vertical spine) ═══ -->
+    <!-- Top bar -->
+    <rect x="360" y="20"  width="140" height="36"/>
+    <!-- Mid bar (shared with V right arm) -->
+    <rect x="400" y="92"  width="100" height="36"/>
+    <!-- Bottom bar -->
+    <rect x="360" y="164" width="140" height="36"/>
+    <!-- Vertical spine -->
+    <rect x="464" y="20"  width="36"  height="180"/>
+  </g>
+</svg>
