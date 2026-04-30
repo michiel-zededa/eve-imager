@@ -265,6 +265,19 @@ Item {
                     spacing: Style.spacingXSmall
                     anchors.rightMargin: (sidebarScroll.contentHeight > sidebarScroll.height ? Style.scrollBarWidth : 0)
 
+                    // EVE logo
+                    Image {
+                        source: "qrc:/icons/eve_logo.svg"
+                        fillMode: Image.PreserveAspectFit
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 48
+                        Layout.bottomMargin: Style.spacingSmall
+                        smooth: true
+                        mipmap: true
+                        Accessible.role: Accessible.Graphic
+                        Accessible.name: qsTr("EVE OS logo")
+                    }
+
                     // Header
                     Text {
                         text: qsTr("Setup steps")

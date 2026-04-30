@@ -39,6 +39,7 @@
         <file>icons/cat_3d_printing.png</file>
         <file>icons/logo_stacked_imager.png</file>
         <file>icons/logo_sxs_imager.png</file>
+        <file>icons/eve_logo.svg</file>
         <file>icons/cat_digital_signage.png</file>
         <file>qmlcomponents/ImOptionPill.qml</file>
         <file>qmlcomponents/ImTextField.qml</file>

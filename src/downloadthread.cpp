@@ -1475,9 +1475,7 @@ void DownloadThread::_onWriteError()
         return;
 
 #ifdef Q_OS_WIN
-    // TODO: Implement platform-specific error handling in FileOperations
-    // For now, provide generic error message instead of: if (_file.errorCode() == ERROR_ACCESS_DENIED)
-    if (false) // Temporarily disabled
+    if (_file->GetLastErrorCode() == ERROR_ACCESS_DENIED)
     {
         QString msg = tr("Access denied error while writing file to disk.");
         QSettings registry("HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows Defender\\Windows Defender Exploit Guard\\Controlled Folder Access",
