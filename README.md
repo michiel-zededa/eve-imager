@@ -11,8 +11,8 @@ EVE-Imager downloads EVE OS releases directly from GitHub, lets you configure de
 - **Live release browser** — fetches up to 100 EVE OS releases directly from [lf-edge/eve GitHub releases](https://github.com/lf-edge/eve/releases), sorted by date with the newest on top
 - **LTS filter** — shows only LTS releases; LTS is detected by an even minor version number (e.g. 12.0.x, 12.2.x are LTS; 12.1.x, 12.3.x are non-LTS/current); use the _Use local image file_ tab if you need a non-LTS build
 - **Cascading selection** — choose Version → Architecture → Hypervisor → Platform; only combinations that actually have installer assets are shown
-- **Raw and ISO support** — prefers `.installer.raw` images; falls back to `.installer.iso` when only an ISO is available for a combination
-- **Device configuration** — optionally pre-configure the device before writing:
+- **Raw and ISO support** — prefers `.installer.raw` images; falls back to `.installer.iso` when only an ISO is available for a combination. ISO images are written as raw binary to USB (bootable installer); the customization step is skipped for ISO images since there is no CONFIG partition to write to
+- **Device configuration** — optionally pre-configure the device before writing (RAW images only):
   - Controller URL
   - Network mode: DHCP or static IP (address, gateway, DNS)
   - HTTP/HTTPS proxy
@@ -80,9 +80,9 @@ Build with CMake + Qt 6 via the Qt Online Installer. Run as Administrator (raw d
 
 2. **Storage** — Select the target USB drive. Double-check the device name and size before continuing.
 
-3. **Configuration** _(optional)_ — Configure any combination of the settings below. Leave everything blank to write a vanilla image and configure the device through the controller later.
+3. **Configuration** _(optional, RAW images only)_ — Configure any combination of the settings below. Leave everything blank to write a vanilla image and configure the device through the controller later. This step is skipped automatically for ISO images — configure the device through the controller after installation.
 
-4. **Write** — Review the summary and click **Write**. EVE-Imager downloads the image (if not using a local file), streams it to the USB drive, and verifies the result.
+4. **Write** — Review the summary and click **Write**. EVE-Imager downloads the image (if not using a local file), streams it to the USB drive, and verifies the result. A yellow notice is shown when writing an ISO to remind you that pre-configuration is not available.
 
 5. **Done** — Eject the USB drive and boot your target device from it.
 
