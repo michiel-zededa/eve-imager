@@ -260,14 +260,54 @@ Item {
             border.color: Style.sidebarBorderColour
             border.width: 0
 
+            // ── Logo header ──────────────────────────────────────────────
+            Rectangle {
+                id: sidebarLogoHeader
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                color: Style.zededaNavy
+                height: logoColumn.implicitHeight + Style.cardPadding * 2
+
+                ColumnLayout {
+                    id: logoColumn
+                    anchors.centerIn: parent
+                    width: parent.width - Style.cardPadding * 2
+                    spacing: Style.scaled(4)
+
+                    Image {
+                        id: eveLogoImage
+                        source: "qrc:/icons/eve-logo.svg"
+                        Layout.alignment: Qt.AlignHCenter
+                        Layout.preferredHeight: Style.scaled(46)
+                        Layout.preferredWidth: Style.scaled(46)
+                        fillMode: Image.PreserveAspectFit
+                        smooth: true
+                        antialiasing: true
+                    }
+
+                    Text {
+                        text: qsTr("EVE OS Imager")
+                        font.family: Style.fontFamilyBold
+                        font.pointSize: Style.fontSizeFormLabel
+                        font.bold: true
+                        color: "#ffffff"
+                        Layout.alignment: Qt.AlignHCenter
+                        horizontalAlignment: Text.AlignHCenter
+                    }
+                }
+            }
+
             Flickable {
                 id: sidebarScroll
                 clip: true
                 anchors.left: parent.left
                 anchors.right: parent.right
-                anchors.top: parent.top
+                anchors.top: sidebarLogoHeader.bottom
                 anchors.bottom: sidebarBottom.top
-                anchors.margins: Style.cardPadding
+                anchors.topMargin: Style.cardPadding
+                anchors.leftMargin: Style.cardPadding
+                anchors.rightMargin: Style.cardPadding
                 contentWidth: -1
                 contentHeight: sidebarColumn.implicitHeight
                 z: 1
@@ -278,13 +318,12 @@ Item {
                     spacing: Style.spacingXSmall
                     anchors.rightMargin: (sidebarScroll.contentHeight > sidebarScroll.height ? Style.scrollBarWidth : 0)
 
-                    // Header
+                    // Steps label
                     Text {
                         text: qsTr("Setup steps")
-                        font.pointSize: Style.fontSizeHeading
-                        font.family: Style.fontFamilyBold
-                        font.bold: true
-                        color: Style.sidebarTextOnInactiveColor
+                        font.pointSize: Style.fontSizeDescription
+                        font.family: Style.fontFamily
+                        color: Style.sidebarTextDisabledColor
                         Layout.fillWidth: true
                         Layout.bottomMargin: Style.spacingSmall
                         Accessible.role: Accessible.Heading
