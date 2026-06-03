@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 120">
+  <!--
+    EVE wordmark — parallelogram bars matching reference proportions.
+    ViewBox 200×120 (1.67:1 ratio).
+    V spans x=60 to x=140 at top (80px = 40% of width), tip at (100,120).
+    V face slope: 40/120 = 1/3 px/px (≈18°).
+    Bars: 34px tall, 9px gaps → 3×34 + 2×9 = 120px fills full height.
+    Each bar is a TRUE parallelogram: both left and right edges follow
+    the V face slope (parallel to each other), giving a clear diagonal lean.
+    Bar width: 55px horizontal. Bars step ~14px inward per row.
+  -->
+
+  <!-- Left E (backwards, opening right) — parallelograms leaning right -->
+  <polygon fill="#41C4C1" points="5,0   60,0   71,34  16,34"/>
+  <polygon fill="#41C4C1" points="19,43  74,43  86,77  31,77"/>
+  <polygon fill="#41C4C1" points="34,86  89,86  100,120 45,120"/>
+
+  <!-- Central downward V -->
+  <polygon fill="#41C4C1" points="60,0 140,0 100,120"/>
+
+  <!-- Right E (mirrored, opening left) — parallelograms leaning left -->
+  <polygon fill="#41C4C1" points="195,0  140,0  129,34  184,34"/>
+  <polygon fill="#41C4C1" points="181,43 126,43 114,77  169,77"/>
+  <polygon fill="#41C4C1" points="166,86 111,86 100,120 155,120"/>
+</svg>

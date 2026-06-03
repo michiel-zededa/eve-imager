@@ -178,6 +178,7 @@ add_custom_command(TARGET ${PROJECT_NAME}
     COMMAND ${CMAKE_COMMAND} -E remove_directory "${APP_BUNDLE_PATH}/Contents/Resources/qml/QtQuick/Controls/macOS"
     COMMAND ${CMAKE_COMMAND} -E remove_directory "${APP_BUNDLE_PATH}/Contents/Resources/qml/QtQuick/Controls/FluentWinUI3"
     COMMAND ${CMAKE_COMMAND} -E remove_directory "${APP_BUNDLE_PATH}/Contents/Resources/qml/QtQuick/Controls/designer"
+    COMMAND ${CMAKE_COMMAND} -E remove_directory "${APP_BUNDLE_PATH}/Contents/Resources/qml/QtQuick/NativeStyle"
     COMMAND ${CMAKE_COMMAND} -E remove_directory "${APP_BUNDLE_PATH}/Contents/Resources/qml/QtQuick/VirtualKeyboard"
     COMMAND ${CMAKE_COMMAND} -E remove_directory "${APP_BUNDLE_PATH}/Contents/Resources/qml/QtTest"
     COMMAND ${CMAKE_COMMAND} -E remove_directory "${APP_BUNDLE_PATH}/Contents/Resources/qml/Qt/test"
@@ -206,6 +207,15 @@ if(EXISTS "${PRECOMPILED_ICNS}" AND NOT BUILD_CLI_ONLY)
         COMMENT "Installing EVE-Imager icon (AppIcon.icns)"
     )
 endif()
+
+# MUST be the LAST POST_BUILD step: remove broken symlinks (left by pruning),
+# clear extended attributes, then re-seal the bundle with an ad-hoc signature
+# so macOS code-signature validation passes at launch.
+add_custom_command(TARGET ${PROJECT_NAME}
+    POST_BUILD
+    COMMAND /bin/sh "${CMAKE_CURRENT_SOURCE_DIR}/mac/sign_bundle.sh" "${APP_BUNDLE_PATH}"
+    COMMENT "Removing broken symlinks and re-signing app bundle (ad-hoc)"
+)
 
 # Extra (non-version) variables needed by DMG shell scripts
 set(_dmg_extra_vars "${CMAKE_CURRENT_BINARY_DIR}/dmg_extra_vars.cmake")

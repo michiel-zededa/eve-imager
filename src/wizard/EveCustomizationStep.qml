@@ -21,9 +21,6 @@ WizardStepBase {
     required property ImageWriter imageWriter
     required property var wizardContainer
 
-    // Track the filename of the last SSH key file loaded from disk
-    property string _sshKeyFilename: ""
-
     title: qsTr("Device configuration (optional)")
     subtitle: qsTr("Everything on this page is optional — skip it entirely to write a plain EVE OS image. Any values you fill in will be written to the config partition on the USB drive before it is ejected.")
 
@@ -106,91 +103,6 @@ WizardStepBase {
                             }
                         }
 
-                        // ── Advanced toggle ───────────────────────────────────
-                        CheckBox {
-                            id: showAdvancedCerts
-                            text: qsTr("Advanced certificate options")
-                            checked: false
-                            font.family: Style.fontFamily
-                            font.pointSize: Style.fontSizeFormLabel
-                            Layout.topMargin: Style.spacingSmall
-                        }
-
-                        // ── Advanced: CA cert + onboarding certs ──────────────
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: Style.formRowSpacing
-                            visible: showAdvancedCerts.checked
-
-                            // Subtle separator
-                            Rectangle {
-                                Layout.fillWidth: true
-                                height: 1
-                                color: Style.inputBorderColor
-                                opacity: 0.5
-                            }
-
-                            WizardDescriptionText {
-                                text: qsTr("Controller CA certificate — required only for self-hosted or private controller deployments. "
-                                           + "Onboarding certificates allow pre-provisioning a device with a known identity; "
-                                           + "the certificate must be pre-registered in your controller.")
-                                Layout.fillWidth: true
-                            }
-
-                            RowLayout {
-                                Layout.fillWidth: true
-                                spacing: Style.spacingSmall
-                                WizardFormLabel {
-                                    text: qsTr("Controller CA cert")
-                                    Layout.preferredWidth: Style.scaled(140)
-                                }
-                                ImTextField {
-                                    id: rootCertField
-                                    Layout.fillWidth: true
-                                    readOnly: true
-                                    placeholderText: qsTr("root-certificate.pem  (optional)")
-                                    text: root.wizardContainer.eveConfig.rootCertPath
-                                }
-                                ImButton {
-                                    text: qsTr("Browse…")
-                                    onClicked: rootCertPicker.open()
-                                }
-                            }
-
-                            RowLayout {
-                                Layout.fillWidth: true
-                                spacing: Style.spacingSmall
-                                WizardFormLabel {
-                                    text: qsTr("Onboard cert (.pem)")
-                                    Layout.preferredWidth: Style.scaled(140)
-                                }
-                                ImTextField {
-                                    id: certPathField
-                                    Layout.fillWidth: true
-                                    readOnly: true
-                                    placeholderText: qsTr("onboard.cert.pem  (optional)")
-                                    text: root.wizardContainer.eveConfig.onboardCertPath
-                                }
-                                ImButton { text: qsTr("Browse…"); onClicked: certFilePicker.open() }
-                            }
-
-                            RowLayout {
-                                Layout.fillWidth: true
-                                spacing: Style.spacingSmall
-                                WizardFormLabel {
-                                    text: qsTr("Onboard key (.pem)")
-                                    Layout.preferredWidth: Style.scaled(140)
-                                }
-                                ImTextField {
-                                    id: keyPathField
-                                    Layout.fillWidth: true
-                                    readOnly: true
-                                    placeholderText: qsTr("onboard.key.pem  (optional)")
-                                    text: root.wizardContainer.eveConfig.onboardKeyPath
-                                }
-                                ImButton { text: qsTr("Browse…"); onClicked: keyFilePicker.open() }
-                            }
-                        }
                     }
                 }
 
@@ -350,75 +262,6 @@ WizardStepBase {
                     }
                 }
 
-                // ── SSH access ────────────────────────────────────────────────
-                Text {
-                    text: qsTr("SSH access")
-                    font.pointSize: Style.fontSizeHeading
-                    font.family: Style.fontFamilyBold
-                    font.bold: true
-                    color: Style.zededaNavy
-                    Layout.fillWidth: true
-                    Layout.topMargin: Style.spacingSmall
-                }
-
-                WizardSectionContainer {
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: Style.formRowSpacing
-
-                        WizardDescriptionText {
-                            text: qsTr("Add an SSH public key to enable debug console access on the device. "
-                                       + "Paste the key below or load it from a file.")
-                            Layout.fillWidth: true
-                        }
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: Style.spacingSmall
-
-                            ScrollView {
-                                Layout.fillWidth: true
-                                Layout.preferredHeight: Style.scaled(70)
-                                clip: true
-
-                                TextArea {
-                                    id: authorizedKeysArea
-                                    placeholderText: qsTr("ssh-ed25519 AAAA… user@host  (optional)")
-                                    text: root.wizardContainer.eveConfig.authorizedKeys
-                                    font.family: "Menlo, Monaco, Courier New, monospace"
-                                    font.pointSize: Style.fontSizeDescription
-                                    wrapMode: TextArea.Wrap
-                                    onTextChanged: root.setCfg("authorizedKeys", text)
-                                    background: Rectangle {
-                                        color: Style.inputBackgroundColor
-                                        border.color: authorizedKeysArea.activeFocus
-                                                      ? Style.inputBorderFocusColor
-                                                      : Style.inputBorderColor
-                                        radius: Style.inputBorderRadius
-                                    }
-                                }
-                            }
-
-                            ImButton {
-                                text: qsTr("Load file…")
-                                onClicked: sshKeyFilePicker.open()
-                                Layout.alignment: Qt.AlignTop
-                            }
-                        }
-
-                        Text {
-                            visible: root._sshKeyFilename.length > 0
-                            text: qsTr("Loaded from: %1").arg(root._sshKeyFilename)
-                            font.family: Style.fontFamily
-                            font.pointSize: Style.fontSizeDescription
-                            font.italic: true
-                            color: Style.textDescriptionColor
-                            Layout.fillWidth: true
-                            elide: Text.ElideMiddle
-                        }
-                    }
-                }
-
                 // ── Installation ──────────────────────────────────────────────
                 Text {
                     text: qsTr("Installation")
@@ -489,72 +332,4 @@ WizardStepBase {
         }
     ] // content:
 
-    // ── File dialogs ──────────────────────────────────────────────────────────
-
-    ImFileDialog {
-        id: rootCertPicker
-        parent: Overlay.overlay
-        anchors.centerIn: parent
-        title: qsTr("Select controller CA certificate")
-        nameFilters: ["PEM / CRT files (*.pem *.crt)", "All files (*)"]
-        showHiddenFiles: true
-        onAccepted: {
-            var path = selectedFile.toString().replace(/^(file:\/{2,3})/, "")
-            root.setCfg("rootCertPath", path)
-            rootCertField.text = path
-        }
-    }
-
-    ImFileDialog {
-        id: certFilePicker
-        parent: Overlay.overlay
-        anchors.centerIn: parent
-        title: qsTr("Select onboarding certificate")
-        nameFilters: ["PEM files (*.pem *.crt)", "All files (*)"]
-        showHiddenFiles: true
-        onAccepted: {
-            var path = selectedFile.toString().replace(/^(file:\/{2,3})/, "")
-            root.setCfg("onboardCertPath", path)
-            certPathField.text = path
-        }
-    }
-
-    ImFileDialog {
-        id: keyFilePicker
-        parent: Overlay.overlay
-        anchors.centerIn: parent
-        title: qsTr("Select onboarding private key")
-        nameFilters: ["PEM files (*.pem *.key)", "All files (*)"]
-        showHiddenFiles: true
-        onAccepted: {
-            var path = selectedFile.toString().replace(/^(file:\/{2,3})/, "")
-            root.setCfg("onboardKeyPath", path)
-            keyPathField.text = path
-        }
-    }
-
-    ImFileDialog {
-        id: sshKeyFilePicker
-        parent: Overlay.overlay
-        anchors.centerIn: parent
-        title: qsTr("Select SSH public key")
-        nameFilters: ["Public key files (*.pub)", "All files (*)"]
-        showHiddenFiles: true
-        // Open directly in ~/.ssh so the user sees their keys immediately
-        currentFolder: StandardPaths.writableLocation(StandardPaths.HomeLocation) + "/.ssh"
-        onAccepted: {
-            var path = selectedFile.toString().replace(/^(file:\/{2,3})/, "")
-            root._sshKeyFilename = path.split("/").pop()
-            var xhr = new XMLHttpRequest()
-            xhr.open("GET", selectedFile.toString())
-            xhr.onreadystatechange = function() {
-                if (xhr.readyState === XMLHttpRequest.DONE) {
-                    var key = xhr.responseText.trim()
-                    root.setCfg("authorizedKeys", key)
-                    authorizedKeysArea.text = key
-                }
-            }
-            xhr.send()
-        }
-    }
 }

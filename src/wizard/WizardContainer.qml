@@ -261,40 +261,59 @@ Item {
             border.width: 0
 
             // ── Logo header ──────────────────────────────────────────────
-            Rectangle {
+            Item {
                 id: sidebarLogoHeader
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.top: parent.top
-                color: Style.zededaNavy
-                height: logoColumn.implicitHeight + Style.cardPadding * 2
+                height: logoHeaderColumn.implicitHeight + Style.cardPadding * 2 + 1 // +1 for separator
 
                 ColumnLayout {
-                    id: logoColumn
-                    anchors.centerIn: parent
-                    width: parent.width - Style.cardPadding * 2
-                    spacing: Style.scaled(4)
+                    id: logoHeaderColumn
+                    anchors.top: parent.top
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.topMargin: Style.cardPadding
+                    anchors.leftMargin: Style.scaled(20)
+                    anchors.rightMargin: Style.scaled(20)
+                    spacing: Style.scaled(3)
 
+                    // EVE wordmark PNG (612×258, exact reference logo)
                     Image {
-                        id: eveLogoImage
-                        source: "qrc:/icons/eve-logo.svg"
+                        id: eveWordmarkImage
+                        source: "../icons/eve-wordmark.png"
+                        // Width = 65% of sidebar content, capped at 150px
+                        property real logoWidth: Math.min(
+                            150,
+                            Math.round((root.sidebarWidthValue - Style.scaled(40)) * 0.65))
+                        Layout.preferredWidth:  logoWidth
+                        Layout.preferredHeight: Math.max(1, Math.round(logoWidth * 258 / 612))
                         Layout.alignment: Qt.AlignHCenter
-                        Layout.preferredHeight: Style.scaled(46)
-                        Layout.preferredWidth: Style.scaled(46)
                         fillMode: Image.PreserveAspectFit
                         smooth: true
                         antialiasing: true
                     }
 
+                    // Subtitle
                     Text {
-                        text: qsTr("EVE OS Imager")
-                        font.family: Style.fontFamilyBold
-                        font.pointSize: Style.fontSizeFormLabel
-                        font.bold: true
-                        color: "#ffffff"
-                        Layout.alignment: Qt.AlignHCenter
+                        text: qsTr("EVE Installer")
+                        font.family: Style.fontFamily
+                        font.pointSize: Style.fontSizeDescription
+                        font.letterSpacing: Style.scaled(2)
+                        color: Style.zededaNavy
+                        opacity: 0.55
+                        Layout.fillWidth: true
                         horizontalAlignment: Text.AlignHCenter
                     }
+                }
+
+                // Bottom separator line
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    height: 1
+                    color: Style.titleSeparatorColor
                 }
             }
 
