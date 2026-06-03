@@ -1,23 +1,22 @@
-# EVE-Imager
+# EVE Installer
 
 A graphical tool for writing [LF Edge EVE OS](https://github.com/lf-edge/eve) installer images to USB drives. Built on top of [Raspberry Pi Imager](https://github.com/raspberrypi/rpi-imager).
 
-EVE-Imager downloads EVE OS releases directly from GitHub, lets you configure device settings (controller URL, network, certificates), writes the image to a USB drive, and verifies the result — all in one guided workflow.
+EVE Installer downloads EVE OS releases directly from GitHub, lets you configure device settings (controller URL, network, WiFi), writes the image to a USB drive, and verifies the result — all in one guided workflow.
 
 ---
 
 ## Features
 
-- **Live release browser** — fetches available EVE OS versions directly from the [lf-edge/eve GitHub releases](https://github.com/lf-edge/eve/releases); no manual URL hunting required
+- **Live release browser** — fetches up to 100 EVE OS releases directly from [lf-edge/eve GitHub releases](https://github.com/lf-edge/eve/releases), sorted by date with the newest on top
+- **LTS filter** — shows only LTS releases; LTS is detected by an even minor version number (e.g. 12.0.x, 12.2.x are LTS; 12.1.x, 12.3.x are non-LTS/current); use the _Use local image file_ tab if you need a non-LTS build
 - **Cascading selection** — choose Version → Architecture → Hypervisor → Platform; only combinations that actually have installer assets are shown
-- **Raw and ISO support** — prefers `.installer.raw` images; falls back to `.installer.iso` when only an ISO is available for a combination
-- **Device configuration** — optionally pre-configure the device before writing:
-  - Controller URL and custom CA certificate
+- **Raw and ISO support** — prefers `.installer.raw` images; falls back to `.installer.iso` when only an ISO is available for a combination. ISO images are written as raw binary to USB (bootable installer); the customization step is skipped for ISO images since there is no CONFIG partition to write to
+- **Device configuration** — optionally pre-configure the device before writing (RAW images only):
+  - Controller URL
   - Network mode: DHCP or static IP (address, gateway, DNS)
   - HTTP/HTTPS proxy
-  - Onboarding certificate and key
-  - Device serial number (soft serial)
-  - SSH public key for debug console access
+  - WiFi (SSID and WPA2 password)
   - Target install disk and separate `/persist` disk
   - Auto-reboot after installation
 - **Local image support** — bypass the GitHub release browser and write a locally downloaded `.raw` file instead
@@ -36,24 +35,29 @@ EVE-Imager downloads EVE OS releases directly from GitHub, lets you configure de
 
 ### macOS (build from source)
 
-Requirements: Xcode command-line tools, CMake ≥ 3.16, Qt 6.x
+Requirements: Xcode command-line tools, CMake ≥ 3.16, Qt 6.x (via Homebrew: `brew install qt`)
 
 ```bash
 git clone https://github.com/michiel-zededa/eve-imager.git
 cd eve-imager
-cmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build
-# Sign locally (ad-hoc, no Apple Developer account needed):
-find build/eve-imager.app \( -name "*.dylib" -o -name "*.so" \) | \
-    awk '{print length, $0}' | sort -rn | cut -d' ' -f2- | \
-    xargs -I{} codesign --force --sign - "{}"
-find build/eve-imager.app -name "*.framework" -type d | \
-    awk '{print length, $0}' | sort -rn | cut -d' ' -f2- | \
-    xargs -I{} codesign --force --sign - "{}"
-codesign --force --sign - build/eve-imager.app/Contents/MacOS/eve-imager
-codesign --force --sign - build/eve-imager.app
-open build/eve-imager.app
+
+# One-time: create a local code-signing certificate so the app runs permanently
+./setup-codesign.sh
+
+# Build and launch
+./run-dev.sh --rebuild
 ```
+
+`run-dev.sh` auto-detects your Qt installation and architecture, builds the app, signs it with the local certificate, and opens it. On subsequent runs you only need `./run-dev.sh` (no rebuild needed unless sources changed).
+
+> **Note:** The build system (`cmake`) auto-signs the app after every rebuild. The `setup-codesign.sh` step only needs to be run once per machine.
+
+#### Distributing to others
+
+The local self-signed certificate is machine-specific and cannot be bundled with the app. For sharing with colleagues:
+
+- **Quick option:** Recipients right-click the `.app` → **Open** the first time to bypass Gatekeeper. macOS remembers the exception.
+- **Proper distribution:** Sign with an [Apple Developer ID](https://developer.apple.com/programs/) certificate and notarize — the app will then run on any Mac without any extra steps.
 
 ### Linux (build from source)
 
@@ -75,13 +79,13 @@ Build with CMake + Qt 6 via the Qt Online Installer. Run as Administrator (raw d
 
 ## Usage
 
-1. **Version** — Select an EVE OS version from the dropdown (loaded live from GitHub). Choose architecture, hypervisor, and platform. Or switch to the _Use local image file_ tab to pick a `.raw` file you already have.
+1. **Version** — Select an EVE OS version from the dropdown (loaded live from GitHub, newest first). Only LTS releases are shown (even minor version number — e.g. 12.0.x, 12.2.x). Choose architecture, hypervisor, and platform. Or switch to the _Use local image file_ tab to pick a `.raw` or `.iso` file you already have (useful for non-LTS builds).
 
 2. **Storage** — Select the target USB drive. Double-check the device name and size before continuing.
 
-3. **Configuration** _(optional)_ — Configure any combination of the settings below. Leave everything blank to write a vanilla image and configure the device through the controller later.
+3. **Configuration** _(optional, RAW images only)_ — Configure any combination of the settings below. Leave everything blank to write a plain image and configure the device through the controller later. This step is skipped automatically for ISO images.
 
-4. **Write** — Review the summary and click **Write**. EVE-Imager downloads the image (if not using a local file), streams it to the USB drive, and verifies the result.
+4. **Write** — Review the summary and click **Write**. EVE-Imager downloads the image (if not using a local file), streams it to the USB drive, and verifies the result. A yellow notice is shown when writing an ISO to remind you that pre-configuration is not available.
 
 5. **Done** — Eject the USB drive and boot your target device from it.
 
@@ -110,27 +114,14 @@ When you fill in the Configuration step, EVE-Imager writes the following files t
 | File | Description |
 |---|---|
 | `server` | Controller hostname, e.g. `zedcloud.example.zededa.net` |
-| `root-certificate.pem` | CA certificate used to verify TLS connections to the controller. Required for self-hosted or private controller deployments. |
 
-### Networking
-
-| File | Description |
-|---|---|
-| `DevicePortConfig/override.json` | Network port configuration. Written when static IP or a proxy is configured; omitted for plain DHCP. |
-
-### Device identity
+### Networking / WiFi
 
 | File | Description |
 |---|---|
-| `onboard.cert.pem` | Onboarding certificate — must be pre-registered in the controller. |
-| `onboard.key.pem` | Matching onboarding private key. |
-| `soft_serial` | Software-defined serial number sent to the controller at registration. Used to pre-provision or auto-approve a device. |
+| `DevicePortConfig/override.json` | Network port configuration. Written when static IP, a proxy, or a WiFi network is configured; omitted for plain wired DHCP. Includes a `wlan0` port with WPA2 credentials when an SSID is provided. |
 
-### SSH access
-
-| File | Description |
-|---|---|
-| `authorized_keys` | SSH public key (OpenSSH format) for debug console access on the device. |
+The WiFi configuration uses EVE OS's native format: `WirelessTypeWifi = 2`, `WifiKeySchemeWpaPsk = 1`, `DhcpTypeClient = 4`, as defined in EVE's device model.
 
 ### Installation (written to `grub.cfg`)
 
@@ -165,21 +156,26 @@ src/
 ### Building for development
 
 ```bash
-cmake -B build -DCMAKE_BUILD_TYPE=Debug
-cmake --build build
+# First time on a new machine:
+./setup-codesign.sh          # creates a local code-signing certificate
+
+./run-dev.sh --rebuild       # configure + build + sign + launch
+./run-dev.sh                 # sign + launch (no rebuild)
 ```
+
+`run-dev.sh` auto-detects your Qt installation (`brew --prefix qt`) and CPU architecture.
 
 ### Running with debug logging
 
 ```bash
-sudo ./build/eve-imager.app/Contents/MacOS/eve-imager --log-file /tmp/eve-imager.log
+./build/eve-imager.app/Contents/MacOS/eve-imager --log-file /tmp/eve-imager.log
 ```
 
 ---
 
 ## Based on
 
-EVE-Imager is a fork of [Raspberry Pi Imager](https://github.com/raspberrypi/rpi-imager) (Apache 2.0).  
+EVE Installer is a fork of [Raspberry Pi Imager](https://github.com/raspberrypi/rpi-imager) (Apache 2.0).  
 The core write engine, FAT partition handling, and cross-platform build system are inherited from that project.
 
 ---
