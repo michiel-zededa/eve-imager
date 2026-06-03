@@ -34,7 +34,6 @@ BaseDialog {
     implicitWidth: Math.max(
         chkBeep.naturalWidth,
         chkEject.naturalWidth,
-        chkTelemetry.naturalWidth,
         chkDisableWarnings.naturalWidth
     ) + Style.cardPadding * 4  // Double padding: contentLayout + optionsLayout margins
 
@@ -49,12 +48,7 @@ BaseDialog {
             return []
         }, 0)
         registerFocusGroup("options", function(){
-            var items = [chkBeep.focusItem, chkEject.focusItem, chkTelemetry.focusItem]
-            // Include telemetry help link if visible
-            if (chkTelemetry.helpLinkItem && chkTelemetry.helpLinkItem.visible)
-                items.push(chkTelemetry.helpLinkItem)
-            items.push(chkDisableWarnings.focusItem)
-            return items
+            return [chkBeep.focusItem, chkEject.focusItem, chkDisableWarnings.focusItem]
         }, 1)
         registerFocusGroup("buttons", function(){
             return [cancelButton, saveButton]
@@ -106,18 +100,6 @@ BaseDialog {
                 id: chkEject
                 text: qsTr("Eject media when finished")
                 accessibleDescription: qsTr("Automatically eject the storage device when the write process completes successfully")
-                Layout.fillWidth: true
-                Component.onCompleted: {
-                    focusItem.activeFocusOnTab = true
-                }
-            }
-
-            ImOptionPill {
-                id: chkTelemetry
-                text: qsTr("Enable anonymous statistics (telemetry)")
-                accessibleDescription: qsTr("Send anonymous usage statistics to help improve EVE Imager")
-                helpLabel: imageWriter.isEmbeddedMode() ? "" : qsTr("What is this?")
-                helpUrl: imageWriter.isEmbeddedMode() ? "" : "https://github.com/lf-edge/eve"
                 Layout.fillWidth: true
                 Component.onCompleted: {
                     focusItem.activeFocusOnTab = true
@@ -221,7 +203,6 @@ BaseDialog {
         // Only enable beep if it's both saved as enabled AND available on this system
         chkBeep.checked = imageWriter.getBoolSetting("beep") && imageWriter.isBeepAvailable();
         chkEject.checked = imageWriter.getBoolSetting("eject");
-        chkTelemetry.checked = imageWriter.getBoolSetting("telemetry");
         // Do not load from QSettings; keep ephemeral
         chkDisableWarnings.checked = popup.wizardContainer ? popup.wizardContainer.disableWarnings : false;
 
@@ -241,7 +222,6 @@ BaseDialog {
         // Only save beep as enabled if it's actually available on this system
         imageWriter.setSetting("beep", chkBeep.checked && imageWriter.isBeepAvailable());
         imageWriter.setSetting("eject", chkEject.checked);
-        imageWriter.setSetting("telemetry", chkTelemetry.checked);
         // Do not persist disable_warnings; set ephemeral flag only
         if (popup.wizardContainer)
             popup.wizardContainer.disableWarnings = chkDisableWarnings.checked;
