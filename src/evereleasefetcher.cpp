@@ -196,34 +196,33 @@ int EveReleaseFetcher::parseReleases(const QByteArray &json)
             // Accept installer assets in all supported formats:
             //   .installer.raw      — uncompressed raw image (preferred)
             //   .installer.raw.zst  — zstd-compressed raw (libarchive decompresses on the fly)
-            //   .installer.img      — legacy raw format (older EVE releases)
             //   .installer.iso      — ISO image (no config-partition customization)
-            // Reject .installer-net.tar and other non-installer assets.
+            // Rejected:
+            //   .installer.img      — gzip-compressed netboot/PXE image (NOT a raw disk image;
+            //                         decompressed content is not sector-aligned and cannot be
+            //                         written to USB). Older EVE releases (≤12.x) used this.
+            //   .installer-net.tar  — network installer archive, not USB-writable
             bool isRawZst = name.endsWith(QLatin1String(".installer.raw.zst"));
-            bool isRaw    = !isRawZst && (name.endsWith(QLatin1String(".installer.raw"))
-                                       || name.endsWith(QLatin1String(".installer.img")));
+            bool isRaw    = !isRawZst && name.endsWith(QLatin1String(".installer.raw"));
             bool isIso    = !isRaw && !isRawZst && name.endsWith(QLatin1String(".installer.iso"));
             if (!isRaw && !isRawZst && !isIso)
                 continue;
 
             // Determine suffix length to strip to get "{arch}.{hv}.{platform}" prefix
             int suffixLen;
-            if (isRawZst)       suffixLen = QStringLiteral(".installer.raw.zst").length();
-            else if (isIso)     suffixLen = QStringLiteral(".installer.iso").length();
-            else if (name.endsWith(QLatin1String(".installer.raw")))
-                                suffixLen = QStringLiteral(".installer.raw").length();
-            else                suffixLen = QStringLiteral(".installer.img").length();
+            if (isRawZst)  suffixLen = QStringLiteral(".installer.raw.zst").length();
+            else if (isIso) suffixLen = QStringLiteral(".installer.iso").length();
+            else            suffixLen = QStringLiteral(".installer.raw").length();
+            // Format: {arch}.{hv}.{platform}.installer.{raw|raw.zst|iso}
             QString prefix = name.chopped(suffixLen);
             QStringList parts = prefix.split(QLatin1Char('.'));
-            // Modern: {arch}.{hv}.{platform} (≥3 parts)
-            // Legacy: {arch} (1 part, older EVE .img releases)
-            if (parts.isEmpty())
+            if (parts.size() < 3)
                 continue;
 
             AssetInfo asset;
             asset.arch        = parts[0];
-            asset.hypervisor  = parts.size() >= 2 ? parts[1] : QStringLiteral("kvm");
-            asset.platform    = parts.size() >= 3 ? parts.mid(2).join(QLatin1Char('.')) : QStringLiteral("generic");
+            asset.hypervisor  = parts[1];
+            asset.platform    = parts.mid(2).join(QLatin1Char('.'));
             asset.downloadUrl = ao["browser_download_url"].toString();
             asset.size        = ao["size"].toVariant().toLongLong();
             asset.isIso       = isIso;
@@ -302,20 +301,18 @@ QStringList EveReleaseFetcher::versions() const
         }
         // Pick arm64-capable version; fall back to any-arch version
         QStringList result;
-        QSet<QString> added;
-        for (const ReleaseInfo &r : _releases) {
-            if (!r.isLts) continue;
-            QString ver = r.version;
-            if (ver.startsWith(QLatin1Char('v'), Qt::CaseInsensitive))
-                ver = ver.mid(1);
-            const QString major = ver.section(QLatin1Char('.'), 0, 0);
-            if (added.contains(major)) continue;
-            const QString preferred = arm64Best.value(major, anyBest.value(major));
-            if (r.version == preferred) {
-                added.insert(major);
-                result.append(r.version);
-            }
+        for (auto it = anyBest.keyBegin(); it != anyBest.keyEnd(); ++it) {
+            const QString &major = *it;
+            result.append(arm64Best.value(major, anyBest.value(major)));
         }
+        // Sort by major version number descending (16.x before 14.x before 9.x)
+        std::sort(result.begin(), result.end(), [](const QString &a, const QString &b) {
+            auto majorOf = [](const QString &v) {
+                QString s = v.startsWith(QLatin1Char('v'), Qt::CaseInsensitive) ? v.mid(1) : v;
+                return s.section(QLatin1Char('.'), 0, 0).toInt();
+            };
+            return majorOf(a) > majorOf(b);
+        });
         return result;
     }
 
