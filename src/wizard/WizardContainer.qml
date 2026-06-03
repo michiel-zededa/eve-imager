@@ -296,7 +296,7 @@ Item {
 
                     // Subtitle
                     Text {
-                        text: qsTr("EVE Installer")
+                        text: qsTr("EVE Imager")
                         font.family: Style.fontFamily
                         font.pointSize: Style.fontSizeDescription
                         font.letterSpacing: Style.scaled(2)

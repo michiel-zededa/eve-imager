@@ -39,7 +39,7 @@ ApplicationWindow {
     property bool isOffline: imageWriter.isOsListUnavailable
     
     title: {
-        var baseTitle = qsTr("EVE OS Imager %1").arg(imageWriter.constantVersion())
+        var baseTitle = qsTr("EVE Imager %1").arg(imageWriter.constantVersion())
         if (isOffline) {
             baseTitle += " — " + qsTr("Offline")
         }
@@ -306,7 +306,7 @@ ApplicationWindow {
 
         Text {
             id: quitMessage
-            text: qsTr("Raspberry Pi Imager is still busy. Are you sure you want to quit?")
+            text: qsTr("EVE Imager is still busy. Are you sure you want to quit?")
             font.pointSize: Style.fontSizeDescription
             font.family: Style.fontFamily
             color: Style.textDescriptionColor
@@ -329,14 +329,14 @@ ApplicationWindow {
             ImButton {
                 id: quitNoButton
                 text: CommonStrings.no
-                accessibleDescription: qsTr("Return to Raspberry Pi Imager and continue the current operation")
+                accessibleDescription: qsTr("Return to EVE Imager and continue the current operation")
                 activeFocusOnTab: true
                 onClicked: quitDialog.close()
             }
             ImButtonRed {
                 id: quitYesButton
                 text: CommonStrings.yes
-                accessibleDescription: qsTr("Force quit Raspberry Pi Imager and cancel the current write operation")
+                accessibleDescription: qsTr("Force quit EVE Imager and cancel the current write operation")
                 activeFocusOnTab: true
                 onClicked: {
                     window.forceQuit = true;
@@ -448,7 +448,7 @@ ApplicationWindow {
             ImButton {
                 id: installAuthButton
                 text: qsTr("Install Authorization")
-                accessibleDescription: qsTr("Install system authorization to allow Raspberry Pi Imager to run with elevated privileges")
+                accessibleDescription: qsTr("Install system authorization to allow EVE Imager to run with elevated privileges")
                 activeFocusOnTab: true
                 visible: permissionWarningDialog.imageWriter && permissionWarningDialog.imageWriter.isElevatableBundle()
                 // Make button wide enough to fit the text, with sensible bounds
@@ -466,7 +466,7 @@ ApplicationWindow {
             ImButtonRed {
                 id: exitButton
                 text: qsTr("Exit")
-                accessibleDescription: qsTr("Exit Raspberry Pi Imager - you must restart with elevated privileges to write images")
+                accessibleDescription: qsTr("Exit EVE Imager - you must restart with elevated privileges to write images")
                 activeFocusOnTab: true
                 onClicked: Qt.quit()
             }
