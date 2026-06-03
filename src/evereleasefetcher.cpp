@@ -12,9 +12,10 @@
 #include <QJsonObject>
 #include <algorithm>
 
-// Fetch up to 100 releases per page (GitHub API maximum).
-static const char *RELEASES_URL =
-    "https://api.github.com/repos/lf-edge/eve/releases?per_page=100";
+// GitHub API: 100 releases per page (maximum). EVE has 260+ releases so we
+// paginate to ensure all major-version LTS releases are visible.
+static const char *RELEASES_URL_TEMPLATE =
+    "https://api.github.com/repos/lf-edge/eve/releases?per_page=100&page=%1";
 
 // ── Constructor ───────────────────────────────────────────────────────────────
 
@@ -69,18 +70,42 @@ void EveReleaseFetcher::fetchReleases()
     setFetchFailed(false);
     setStatusMessage(tr("Loading releases…"));
     _releases.clear();
+    fetchPage(1);
+}
 
+void EveReleaseFetcher::fetchPage(int page)
+{
+    _currentPage = page;
+    QString url = QString::fromLatin1(RELEASES_URL_TEMPLATE).arg(page);
     auto *fetcher = new CurlFetcher(this);
     connect(fetcher, &CurlFetcher::finished, this, &EveReleaseFetcher::onFetchFinished);
     connect(fetcher, &CurlFetcher::error,    this, &EveReleaseFetcher::onFetchError);
-    fetcher->fetch(QUrl(QLatin1String(RELEASES_URL)));
+    fetcher->fetch(QUrl(url));
 }
 
 void EveReleaseFetcher::onFetchFinished(const QByteArray &data,
                                         const QUrl & /*url*/,
                                         const QUrl & /*effectiveUrl*/)
 {
-    parseReleases(data);
+    int countBefore = _releases.size();
+    int pageEntries = parseReleases(data);  // raw JSON entries on this page
+    Q_UNUSED(countBefore)
+
+    // Continue if the page was non-empty AND we haven't reached the limit.
+    // Use raw entry count (not filtered asset count) so a page full of
+    // non-.raw releases (e.g. older .img-only releases) doesn't stop pagination.
+    if (pageEntries > 0 && _currentPage < MAX_PAGES) {
+        setStatusMessage(tr("Loading releases… (page %1)").arg(_currentPage + 1));
+        fetchPage(_currentPage + 1);
+        return;
+    }
+
+    // All pages fetched — sort everything newest-first and notify
+    std::sort(_releases.begin(), _releases.end(),
+              [](const ReleaseInfo &a, const ReleaseInfo &b) {
+                  return a.publishedAt > b.publishedAt;
+              });
+
     setLoading(false);
 
     if (_releases.isEmpty()) {
@@ -105,25 +130,28 @@ void EveReleaseFetcher::onFetchError(const QString &errorMessage, const QUrl & /
 
 // ── JSON parsing ──────────────────────────────────────────────────────────────
 
-void EveReleaseFetcher::parseReleases(const QByteArray &json)
+int EveReleaseFetcher::parseReleases(const QByteArray &json)
 {
     QJsonParseError err;
     QJsonDocument doc = QJsonDocument::fromJson(json, &err);
     if (err.error != QJsonParseError::NoError) {
         qWarning() << "EveReleaseFetcher: JSON parse error:" << err.errorString();
-        return;
+        return 0;
     }
 
     if (!doc.isArray()) {
         qWarning() << "EveReleaseFetcher: expected JSON array";
-        return;
+        return 0;
     }
 
     const QJsonArray releases = doc.array();
+    int entryCount = releases.size();
     for (const QJsonValue &rv : releases) {
         QJsonObject ro = rv.toObject();
 
-        // Skip drafts and pre-releases
+        // Skip drafts and pre-releases (RCs, betas).
+        // Note: if the EVE team marks a stable LTS release as prerelease=true by
+        // mistake, it will be hidden here. Ask them to fix the release on GitHub.
         if (ro["draft"].toBool() || ro["prerelease"].toBool())
             continue;
 
@@ -165,54 +193,61 @@ void EveReleaseFetcher::parseReleases(const QByteArray &json)
             QJsonObject ao = av.toObject();
             QString name = ao["name"].toString();
 
-            // Accept .installer.raw or .installer.iso
-            bool isRaw = name.endsWith(QLatin1String(".installer.raw"));
-            bool isIso = !isRaw && name.endsWith(QLatin1String(".installer.iso"));
-            if (!isRaw && !isIso)
+            // Accept installer assets in all supported formats:
+            //   .installer.raw      — uncompressed raw image (preferred)
+            //   .installer.raw.zst  — zstd-compressed raw (libarchive decompresses on the fly)
+            //   .installer.img      — legacy raw format (older EVE releases)
+            //   .installer.iso      — ISO image (no config-partition customization)
+            // Reject .installer-net.tar and other non-installer assets.
+            bool isRawZst = name.endsWith(QLatin1String(".installer.raw.zst"));
+            bool isRaw    = !isRawZst && (name.endsWith(QLatin1String(".installer.raw"))
+                                       || name.endsWith(QLatin1String(".installer.img")));
+            bool isIso    = !isRaw && !isRawZst && name.endsWith(QLatin1String(".installer.iso"));
+            if (!isRaw && !isRawZst && !isIso)
                 continue;
 
-            // Format: {arch}.{hv}.{platform}.installer.{raw|iso}
-            int suffixLen = isRaw
-                            ? QStringLiteral(".installer.raw").length()
-                            : QStringLiteral(".installer.iso").length();
+            // Determine suffix length to strip to get "{arch}.{hv}.{platform}" prefix
+            int suffixLen;
+            if (isRawZst)       suffixLen = QStringLiteral(".installer.raw.zst").length();
+            else if (isIso)     suffixLen = QStringLiteral(".installer.iso").length();
+            else if (name.endsWith(QLatin1String(".installer.raw")))
+                                suffixLen = QStringLiteral(".installer.raw").length();
+            else                suffixLen = QStringLiteral(".installer.img").length();
             QString prefix = name.chopped(suffixLen);
             QStringList parts = prefix.split(QLatin1Char('.'));
-            if (parts.size() < 3)
+            // Modern: {arch}.{hv}.{platform} (≥3 parts)
+            // Legacy: {arch} (1 part, older EVE .img releases)
+            if (parts.isEmpty())
                 continue;
 
             AssetInfo asset;
             asset.arch        = parts[0];
-            asset.hypervisor  = parts[1];
-            asset.platform    = parts.mid(2).join(QLatin1Char('.'));
+            asset.hypervisor  = parts.size() >= 2 ? parts[1] : QStringLiteral("kvm");
+            asset.platform    = parts.size() >= 3 ? parts.mid(2).join(QLatin1Char('.')) : QStringLiteral("generic");
             asset.downloadUrl = ao["browser_download_url"].toString();
             asset.size        = ao["size"].toVariant().toLongLong();
             asset.isIso       = isIso;
 
-            // Prefer .raw over .iso: if we already have a .raw for this combo, skip the .iso
-            bool alreadyHaveRaw = false;
-            for (const AssetInfo &existing : assets) {
-                if (existing.arch == asset.arch
-                    && existing.hypervisor == asset.hypervisor
-                    && existing.platform == asset.platform
-                    && !existing.isIso) {
-                    alreadyHaveRaw = true;
+            // Priority: .raw (1) > .raw.zst (2) > .iso (3)
+            // For each arch/hv/platform combo keep only the highest-priority asset.
+            int newPriority = isRaw ? 1 : isRawZst ? 2 : 3;
+
+            bool replaced = false;
+            for (int i = 0; i < assets.size(); ++i) {
+                if (assets[i].arch == asset.arch
+                    && assets[i].hypervisor == asset.hypervisor
+                    && assets[i].platform == asset.platform) {
+                    // Replace existing only if new asset has higher priority
+                    int existingPriority = assets[i].isIso ? 3
+                                        : assets[i].downloadUrl.endsWith(QLatin1String(".zst")) ? 2 : 1;
+                    if (newPriority < existingPriority)
+                        assets[i] = asset;
+                    replaced = true;
                     break;
                 }
             }
-            if (alreadyHaveRaw)
-                continue;
-
-            // If we have an existing .iso entry for this combo and this is a .raw, replace it
-            if (isRaw) {
-                for (int i = 0; i < assets.size(); ++i) {
-                    if (assets[i].arch == asset.arch
-                        && assets[i].hypervisor == asset.hypervisor
-                        && assets[i].platform == asset.platform) {
-                        assets[i] = asset;  // replace iso with raw
-                        goto nextAsset;
-                    }
-                }
-            }
+            if (replaced)
+                goto nextAsset;
 
             assets.append(asset);
             nextAsset:;
@@ -229,13 +264,9 @@ void EveReleaseFetcher::parseReleases(const QByteArray &json)
         _releases.append(rel);
     }
 
-    // Sort by publication date, newest first
-    std::sort(_releases.begin(), _releases.end(),
-              [](const ReleaseInfo &a, const ReleaseInfo &b) {
-                  return a.publishedAt > b.publishedAt;
-              });
-
-    qDebug() << "EveReleaseFetcher: parsed" << _releases.size() << "releases";
+    qDebug() << "EveReleaseFetcher: parsed page" << _currentPage
+             << "—" << entryCount << "entries," << _releases.size() << "with assets total";
+    return entryCount;
 }
 
 // ── Property accessors ────────────────────────────────────────────────────────
@@ -248,15 +279,51 @@ QStringList EveReleaseFetcher::versions() const
         if (r.isLts) { anyLts = true; break; }
     }
 
+    // LTS filter active: show the single best LTS release per major version.
+    // "Best" = latest LTS with arm64 assets; fall back to latest LTS with any arch.
+    // Releases are already sorted newest-first, so the first qualifying entry wins.
+    if (!_showNonLts && anyLts) {
+        // Pass 1: latest LTS with arm64 per major
+        QHash<QString, QString> arm64Best;   // major -> version
+        QHash<QString, QString> anyBest;     // major -> version (any arch)
+        for (const ReleaseInfo &r : _releases) {
+            if (!r.isLts) continue;
+            QString ver = r.version;
+            if (ver.startsWith(QLatin1Char('v'), Qt::CaseInsensitive))
+                ver = ver.mid(1);
+            const QString major = ver.section(QLatin1Char('.'), 0, 0);
+            bool hasArm64 = false;
+            for (const AssetInfo &a : r.assets)
+                if (a.arch == QLatin1String("arm64")) { hasArm64 = true; break; }
+            if (!anyBest.contains(major))
+                anyBest[major] = r.version;
+            if (hasArm64 && !arm64Best.contains(major))
+                arm64Best[major] = r.version;
+        }
+        // Pick arm64-capable version; fall back to any-arch version
+        QStringList result;
+        QSet<QString> added;
+        for (const ReleaseInfo &r : _releases) {
+            if (!r.isLts) continue;
+            QString ver = r.version;
+            if (ver.startsWith(QLatin1Char('v'), Qt::CaseInsensitive))
+                ver = ver.mid(1);
+            const QString major = ver.section(QLatin1Char('.'), 0, 0);
+            if (added.contains(major)) continue;
+            const QString preferred = arm64Best.value(major, anyBest.value(major));
+            if (r.version == preferred) {
+                added.insert(major);
+                result.append(r.version);
+            }
+        }
+        return result;
+    }
+
+    // Non-LTS mode (or no LTS releases found): return everything as-is.
     QStringList result;
     result.reserve(_releases.size());
-    for (const ReleaseInfo &r : _releases) {
-        // When showNonLts is off AND lts releases exist, filter to lts only.
-        // If no lts releases are detected, show everything as a safe fallback.
-        if (!_showNonLts && anyLts && !r.isLts)
-            continue;
+    for (const ReleaseInfo &r : _releases)
         result.append(r.version);
-    }
     return result;
 }
 

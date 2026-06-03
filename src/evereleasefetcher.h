@@ -134,7 +134,8 @@ private slots:
     void onFetchError(const QString &errorMessage, const QUrl &url);
 
 private:
-    void parseReleases(const QByteArray &json);
+    void fetchPage(int page);
+    int  parseReleases(const QByteArray &json);  // returns raw JSON entry count
     void setLoading(bool v);
     void setFetchFailed(bool v);
     void setStatusMessage(const QString &msg);
@@ -149,6 +150,8 @@ private:
     bool    _fetchFailed = false;
     bool    _showNonLts  = false;
     QString _statusMessage;
+    int     _currentPage = 0;
+    static constexpr int MAX_PAGES = 3;  // 3 × 100 = up to 300 releases
 };
 
 #endif // EVERELEASEFETCHER_H

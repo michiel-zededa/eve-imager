@@ -8,10 +8,10 @@ EVE Imager downloads EVE OS releases directly from GitHub, lets you configure de
 
 ## Features
 
-- **Live release browser** — fetches up to 100 EVE OS releases directly from [lf-edge/eve GitHub releases](https://github.com/lf-edge/eve/releases), sorted by date with the newest on top
-- **LTS filter** — shows only LTS releases; LTS is detected by an even minor version number (e.g. 12.0.x, 12.2.x are LTS; 12.1.x, 12.3.x are non-LTS/current); use the _Use local image file_ tab if you need a non-LTS build
+- **Live release browser** — paginates all EVE OS releases from [lf-edge/eve GitHub releases](https://github.com/lf-edge/eve/releases), showing one entry per major version (newest first)
+- **LTS filter** — shows only the latest LTS release per major version (e.g. one entry for 16.x, one for 14.x, one for 9.x); prefers the release with arm64 support when available; use the _Use local image file_ tab for non-LTS builds
 - **Cascading selection** — choose Version → Architecture → Hypervisor → Platform; only combinations that actually have installer assets are shown
-- **Raw and ISO support** — prefers `.installer.raw` images; falls back to `.installer.iso` when only an ISO is available for a combination. ISO images are written as raw binary to USB (bootable installer); the customization step is skipped for ISO images since there is no CONFIG partition to write to
+- **Multi-format support** — handles `.installer.raw`, `.installer.raw.zst` (zstd-compressed, decompressed on the fly), `.installer.img` (legacy), and `.installer.iso`; prefers uncompressed raw over compressed over ISO for each combination; ISO images skip the config customization step
 - **Device configuration** — optionally pre-configure the device before writing (RAW images only):
   - Controller URL
   - Network mode: DHCP or static IP (address, gateway, DNS)
@@ -97,11 +97,14 @@ EVE OS publishes installer images for:
 
 | Architecture | Hypervisor | Platform examples |
 |---|---|---|
-| amd64 | kvm | generic |
-| amd64 | k | generic (ISO only) |
-| arm64 | kvm | generic, nvidia-jp5, nvidia-jp6 |
+| amd64 | kvm | generic, evaluation |
+| amd64 | k | generic |
+| arm64 | kvm | generic, nvidia-jp5, nvidia-jp6, nvidia-jp7 |
+| arm64 | k | generic, nvidia-jp5, nvidia-jp6, nvidia-jp7 |
 
-> **Note:** ISO images (`amd64.k.generic`) can be written to USB as bootable installers, but device configuration (controller URL, network settings) cannot be applied to ISO images — only to `.raw` images.
+> **Note:** ISO images can be written to USB as bootable installers, but device configuration (controller URL, network settings) cannot be applied — only `.raw` and `.raw.zst` images have a CONFIG partition.
+
+> **Note:** If a release is missing from the version list, it may be incorrectly marked as `prerelease=true` on GitHub. Ask the EVE team to correct the release — no code change is needed in EVE Imager.
 
 ---
 
