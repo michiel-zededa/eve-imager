@@ -18,6 +18,7 @@
 #ifndef EVERELEASEFETCHER_H
 #define EVERELEASEFETCHER_H
 
+#include <QDateTime>
 #include <QObject>
 #include <QStringList>
 #include <QVariantMap>
@@ -43,8 +44,10 @@ class EveReleaseFetcher : public QObject
     };
 
     struct ReleaseInfo {
-        QString         version;     // e.g. "12.5.0"
-        QList<AssetInfo> assets;     // installer.raw and installer.iso assets
+        QString          version;       // e.g. "12.5.0"
+        QDateTime        publishedAt;   // from GitHub published_at field
+        bool             isLts = false; // true if tag/name contains "lts"
+        QList<AssetInfo> assets;
     };
 
 public:
@@ -56,18 +59,37 @@ public:
     Q_PROPERTY(bool loading READ loading NOTIFY loadingChanged)
     bool loading() const { return _loading; }
 
+    /** True if the last fetch attempt failed. */
+    Q_PROPERTY(bool fetchFailed READ fetchFailed NOTIFY fetchFailedChanged)
+    bool fetchFailed() const { return _fetchFailed; }
+
     /** Human-readable status ("Loading releases…", "Ready", or "Error: …"). */
     Q_PROPERTY(QString statusMessage READ statusMessage NOTIFY statusMessageChanged)
     QString statusMessage() const { return _statusMessage; }
 
-    /** All version strings that have at least one installer.raw asset, newest first. */
+    /**
+     * Version strings that have at least one installer asset, sorted newest
+     * first.  When showNonLts is false, only LTS-tagged releases are returned
+     * (unless no LTS releases exist, in which case all are returned).
+     */
     Q_PROPERTY(QStringList versions READ versions NOTIFY releasesReady)
     QStringList versions() const;
+
+    /**
+     * When false (default) only LTS releases are shown in the version list.
+     * Set to true to include all releases.
+     */
+    Q_PROPERTY(bool showNonLts READ showNonLts WRITE setShowNonLts NOTIFY showNonLtsChanged)
+    bool showNonLts() const { return _showNonLts; }
+    void setShowNonLts(bool v);
 
     // ── Invokable queries ─────────────────────────────────────────────────
 
     /** Trigger an async fetch from the GitHub Releases API. */
     Q_INVOKABLE void fetchReleases();
+
+    /** Returns true if the given version string is an LTS release. */
+    Q_INVOKABLE bool isLtsVersion(const QString &version) const;
 
     /** Unique architectures available for the given version. */
     Q_INVOKABLE QStringList archesForVersion(const QString &version) const;
@@ -93,8 +115,7 @@ public:
                                     const QString &hypervisor,
                                     const QString &platform) const;
 
-    /** Returns true if the asset for this combination is an ISO (not a raw image).
-     *  ISO images can be written to USB but config customization is not supported. */
+    /** Returns true if the asset for this combination is an ISO (not a raw image). */
     Q_INVOKABLE bool isIsoAsset(const QString &version,
                                 const QString &arch,
                                 const QString &hypervisor,
@@ -103,7 +124,9 @@ public:
 signals:
     void releasesReady();
     void loadingChanged();
+    void fetchFailedChanged();
     void statusMessageChanged();
+    void showNonLtsChanged();
     void fetchFailed(const QString &message);
 
 private slots:
@@ -113,6 +136,7 @@ private slots:
 private:
     void parseReleases(const QByteArray &json);
     void setLoading(bool v);
+    void setFetchFailed(bool v);
     void setStatusMessage(const QString &msg);
 
     const AssetInfo *findAsset(const QString &version,
@@ -121,7 +145,9 @@ private:
                                const QString &platform) const;
 
     QList<ReleaseInfo> _releases;
-    bool    _loading = false;
+    bool    _loading     = false;
+    bool    _fetchFailed = false;
+    bool    _showNonLts  = false;
     QString _statusMessage;
 };
 

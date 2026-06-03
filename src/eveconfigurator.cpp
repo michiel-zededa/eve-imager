@@ -93,51 +93,80 @@ QByteArray EveConfigurator::buildOverrideJson(const QVariantMap &config)
 {
     QString networkMode = config.value("networkMode", "dhcp").toString();
     QString proxyUrl    = config.value("proxyUrl").toString().trimmed();
+    QString wifiSsid    = config.value("wifiSsid").toString().trimmed();
+    QString wifiPass    = config.value("wifiPassword").toString();
 
-    // Only needed for static IP or proxy settings
-    if (networkMode != QLatin1String("static") && proxyUrl.isEmpty())
+    bool needsEth  = (networkMode == QLatin1String("static")) || !proxyUrl.isEmpty();
+    bool needsWifi = !wifiSsid.isEmpty();
+
+    if (!needsEth && !needsWifi)
         return QByteArray();
 
-    QJsonObject port;
-    port["Free"]   = true;
-    port["IfName"] = "eth0";
-    port["Name"]   = "Management";
-    port["IsMgmt"] = true;
+    QJsonArray ports;
 
-    if (networkMode == QLatin1String("static")) {
-        port["Dhcp"]       = 1;
-        port["AddrSubnet"] = config.value("staticIp").toString().trimmed();
-        port["Gateway"]    = config.value("gateway").toString().trimmed();
+    // ── Ethernet port (eth0) ──────────────────────────────────────────────────
+    if (needsEth) {
+        QJsonObject port;
+        port["Free"]   = true;
+        port["IfName"] = "eth0";
+        port["Name"]   = "Management";
+        port["IsMgmt"] = true;
 
-        QString dns = config.value("dns").toString().trimmed();
-        if (!dns.isEmpty()) {
-            QJsonArray dnsArr;
-            const QStringList parts = dns.split(QLatin1Char(','));
-            for (const QString &s : parts) {
-                QString trimmed = s.trimmed();
-                if (!trimmed.isEmpty())
-                    dnsArr.append(trimmed);
+        if (networkMode == QLatin1String("static")) {
+            port["Dhcp"]       = 1;
+            port["AddrSubnet"] = config.value("staticIp").toString().trimmed();
+            port["Gateway"]    = config.value("gateway").toString().trimmed();
+
+            QString dns = config.value("dns").toString().trimmed();
+            if (!dns.isEmpty()) {
+                QJsonArray dnsArr;
+                const QStringList parts = dns.split(QLatin1Char(','));
+                for (const QString &s : parts) {
+                    QString trimmed = s.trimmed();
+                    if (!trimmed.isEmpty())
+                        dnsArr.append(trimmed);
+                }
+                port["DnsServers"] = dnsArr;
+            } else {
+                port["DnsServers"] = QJsonValue::Null;
             }
-            port["DnsServers"] = dnsArr;
         } else {
-            port["DnsServers"] = QJsonValue::Null;
+            port["Dhcp"] = 4; // DHCP
         }
-    } else {
-        // DHCP with proxy
-        port["Dhcp"] = 4;
+
+        if (!proxyUrl.isEmpty()) {
+            port["NetworkProxyEnable"] = true;
+            port["NetworkProxyURL"]    = proxyUrl;
+        }
+
+        ports.append(port);
     }
 
-    if (!proxyUrl.isEmpty()) {
-        port["NetworkProxyEnable"] = true;
-        port["NetworkProxyURL"]    = proxyUrl;
-    } else {
-        port["NetworkProxyEnable"] = false;
-        port["NetworkProxyURL"]    = QString();
+    // ── WiFi port (wlan0) ─────────────────────────────────────────────────────
+    if (needsWifi) {
+        QJsonObject wifiEntry;
+        wifiEntry["SSID"]      = wifiSsid;
+        wifiEntry["KeyScheme"] = 1; // WifiKeySchemeWpaPsk = 1 in EVE's Go enum
+        if (!wifiPass.isEmpty())
+            wifiEntry["Password"] = wifiPass;
+
+        QJsonObject wirelessCfg;
+        wirelessCfg["WType"] = 2; // WirelessTypeWifi = 2 (1 = Cellular, 0 = None)
+        wirelessCfg["Wifi"]  = QJsonArray{ wifiEntry };
+
+        QJsonObject wifiPort;
+        wifiPort["IfName"]      = "wlan0";
+        wifiPort["IsMgmt"]      = true;
+        wifiPort["IsL3Port"]    = true;
+        wifiPort["Dhcp"]        = 4; // DhcpTypeClient = 4
+        wifiPort["WirelessCfg"] = wirelessCfg;
+
+        ports.append(wifiPort);
     }
 
     QJsonObject root;
     root["Version"] = 1;
-    root["Ports"]   = QJsonArray{ port };
+    root["Ports"]   = ports;
 
     return QJsonDocument(root).toJson(QJsonDocument::Indented);
 }
@@ -207,14 +236,6 @@ bool EveConfigurator::apply(DeviceWrapper &dw, const QVariantMap &config)
         } else {
             qWarning() << "EveConfigurator: cannot read key file" << keyPath;
         }
-    }
-
-    // `soft_serial` — device serial number
-    QString serial = config.value("deviceSerial").toString().trimmed();
-    if (!serial.isEmpty()) {
-        fat->writeFile("soft_serial", serial.toUtf8() + '\n');
-        qDebug() << "EveConfigurator: wrote soft_serial =" << serial;
-        anyWritten = true;
     }
 
     // `authorized_keys` — SSH public key for debug console access

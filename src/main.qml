@@ -28,9 +28,9 @@ ApplicationWindow {
     readonly property alias overlayRootItem: overlayRoot
 
     width: imageWriter.isEmbeddedMode() ? -1 : Style.scaled(680)
-    height: imageWriter.isEmbeddedMode() ? -1 : Style.scaled(450)
+    height: imageWriter.isEmbeddedMode() ? -1 : Style.scaled(580)
     minimumWidth: imageWriter.isEmbeddedMode() ? -1 : Style.scaled(680)
-    minimumHeight: imageWriter.isEmbeddedMode() ? -1 : Style.scaled(420)
+    minimumHeight: imageWriter.isEmbeddedMode() ? -1 : Style.scaled(560)
 
     // Track custom repo host for title display
     property string customRepoHost: imageWriter.customRepoHost()

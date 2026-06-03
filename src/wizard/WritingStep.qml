@@ -59,7 +59,7 @@ WizardStepBase {
     // _srcReady is set true in Component.onCompleted after setSrc() — this makes the
     // nextButtonEnabled binding re-evaluate once the image source is configured.
     property bool _srcReady: false
-    nextButtonEnabled: root.isWriting || root.isComplete || (!beginWriteDelay.running && root._srcReady && imageWriter.readyToWrite())
+    nextButtonEnabled: root.isWriting || root.isComplete || (root.hasFailed ? false : (!beginWriteDelay.running && root._srcReady && imageWriter.readyToWrite()))
     showBackButton: true
 
     readonly property bool isWriting: {
@@ -72,6 +72,9 @@ WizardStepBase {
     readonly property bool isCancelling: imageWriter.writeState === ImageWriter.Cancelling
     readonly property bool isFinalising: imageWriter.writeState === ImageWriter.Finalizing
     readonly property bool isComplete: imageWriter.writeState === ImageWriter.Succeeded
+    readonly property bool hasFailed: imageWriter.writeState === ImageWriter.Failed ||
+                                      imageWriter.writeState === ImageWriter.Cancelled
+    property string errorMessage: ""
     property string bottleneckStatus: ""
     property int writeThroughputKBps: 0
     property string operationWarning: ""  // Non-fatal warning message (e.g., sync fallback)
@@ -79,7 +82,7 @@ WizardStepBase {
     // For EVE, customizations are always shown when the eveConfig has any non-empty field
     readonly property bool anyCustomizationsApplied: false
 
-    // Disable back while writing
+    // Disable back while writing (but allow back after failure so user can retry)
     backButtonEnabled: !root.isWriting
 
     // Content
@@ -89,8 +92,8 @@ WizardStepBase {
         anchors.margins: Style.cardPadding
         spacing: Style.spacingLarge
 
-        // Top spacer to vertically center progress section when writing/complete
-        Item { Layout.fillHeight: true; visible: root.isWriting || root.isComplete }
+        // Top spacer to vertically center progress section when writing/complete/failed
+        Item { Layout.fillHeight: true; visible: root.isWriting || root.isComplete || root.hasFailed }
 
         // Summary section (de-chromed)
         ColumnLayout {
@@ -99,7 +102,7 @@ WizardStepBase {
             Layout.maximumWidth: Style.sectionMaxWidth
             Layout.alignment: Qt.AlignHCenter
             spacing: Style.spacingMedium
-            visible: !root.isWriting && !root.isComplete
+            visible: !root.isWriting && !root.isComplete && !root.hasFailed
 
             Text {
                 id: summaryHeading
@@ -173,6 +176,36 @@ WizardStepBase {
             }
         }
 
+        // ISO notice — shown when writing an ISO (no config applied)
+        Rectangle {
+            id: isoNotice
+            Layout.fillWidth: true
+            Layout.maximumWidth: Style.sectionMaxWidth
+            Layout.alignment: Qt.AlignHCenter
+            color: "#fff3cd"
+            border.color: "#ffc107"
+            border.width: 1
+            radius: Style.sectionBorderRadius
+            height: isoNoticeText.implicitHeight + Style.spacingSmall * 2
+            visible: !root.isWriting && !root.isComplete && !root.hasFailed
+                     && root.wizardContainer.eveIsIsoImage
+
+            Text {
+                id: isoNoticeText
+                anchors {
+                    left: parent.left; right: parent.right
+                    top: parent.top; margins: Style.spacingSmall
+                }
+                text: qsTr("⚠ ISO image — controller URL, network, and SSH settings cannot be "
+                            + "pre-configured on ISO installers. The image will boot as a plain "
+                            + "installer. Configure the device through the controller after installation.")
+                font.family: Style.fontFamily
+                font.pointSize: Style.fontSizeDescription
+                color: "#856404"
+                wrapMode: Text.WordWrap
+            }
+        }
+
         // Customization summary (what will be written) - de-chromed
         ColumnLayout {
             id: customLayout
@@ -180,7 +213,7 @@ WizardStepBase {
             Layout.maximumWidth: Style.sectionMaxWidth
             Layout.alignment: Qt.AlignHCenter
             spacing: Style.spacingMedium
-            visible: !root.isWriting && !root.isComplete && root.anyCustomizationsApplied
+            visible: !root.isWriting && !root.isComplete && !root.hasFailed && root.anyCustomizationsApplied
 
             Text {
                 id: customizationsHeading
@@ -262,7 +295,7 @@ WizardStepBase {
             Layout.maximumWidth: Style.sectionMaxWidth
             Layout.alignment: Qt.AlignHCenter
             spacing: Style.spacingMedium
-            visible: root.isWriting || root.isComplete
+            visible: root.isWriting || root.isComplete || root.hasFailed
 
             Text {
                 id: progressText
@@ -329,10 +362,58 @@ WizardStepBase {
                 wrapMode: Text.WordWrap
                 visible: root.isWriting && root.operationWarning !== ""
             }
+
+            // Error box — shown when write fails so the message isn't lost
+            Rectangle {
+                id: errorBox
+                Layout.fillWidth: true
+                color: "#fdecea"
+                border.color: "#e57373"
+                border.width: 1
+                radius: Style.sectionBorderRadius
+                height: errorColumn.implicitHeight + Style.spacingMedium * 2
+                visible: root.hasFailed && root.errorMessage.length > 0
+
+                ColumnLayout {
+                    id: errorColumn
+                    anchors {
+                        left: parent.left; right: parent.right
+                        top: parent.top
+                        margins: Style.spacingMedium
+                    }
+                    spacing: Style.spacingSmall
+
+                    Text {
+                        text: qsTr("Write failed")
+                        font.pointSize: Style.fontSizeFormLabel
+                        font.family: Style.fontFamilyBold
+                        font.bold: true
+                        color: "#c62828"
+                        Layout.fillWidth: true
+                    }
+                    Text {
+                        text: root.errorMessage
+                        font.pointSize: Style.fontSizeDescription
+                        font.family: Style.fontFamily
+                        color: Style.formLabelColor
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        textFormat: Text.StyledText
+                    }
+                    Text {
+                        text: qsTr("Press ← Back to return and try again.")
+                        font.pointSize: Style.fontSizeDescription
+                        font.family: Style.fontFamily
+                        color: Style.textDescriptionColor
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                    }
+                }
+            }
         }
 
-        // Bottom spacer to vertically center progress section when writing/complete
-        Item { Layout.fillHeight: true; visible: root.isWriting || root.isComplete }
+        // Bottom spacer to vertically center progress section when writing/complete/failed
+        Item { Layout.fillHeight: true; visible: root.isWriting || root.isComplete || root.hasFailed }
     }
     ]
 
@@ -528,6 +609,7 @@ WizardStepBase {
             root.bottleneckStatus = ""
             root.writeThroughputKBps = 0
             root.operationWarning = ""
+            root.errorMessage = ""
             // Check if extract size is known upfront (e.g., gz files can't reliably store sizes >4GB)
             root.isIndeterminateProgress = !imageWriter.isExtractSizeKnown()
             progressText.text = qsTr("Starting write process...")
@@ -608,7 +690,8 @@ WizardStepBase {
         }
 
         function onError(msg) {
-            progressText.text = qsTr("Write failed: %1").arg(msg)
+            root.errorMessage = msg
+            progressText.text = qsTr("Write failed")
         }
 
         function onFinalizing() {
@@ -649,7 +732,12 @@ WizardStepBase {
             var dlUrl = "https://github.com/lf-edge/eve/releases/download/" + cfg.eveVersion + "/" + assetName
             root.imageWriter.setSrc(dlUrl, 0, 0, "", false, "EVE OS", cfg.selectedOsName)
         }
-        root.imageWriter.setEveConfig(cfg.eveConfig)
+        // Don't pass EVE config for ISO images — ISOs have no CONFIG partition
+        if (!cfg.eveIsIsoImage) {
+            root.imageWriter.setEveConfig(cfg.eveConfig)
+        } else {
+            root.imageWriter.setEveConfig({})
+        }
         root._srcReady = true    // unblock the Write button binding
 
         // Register summary section as first focus group

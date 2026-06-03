@@ -100,7 +100,7 @@ Item {
     property string eveLocalImagePath: ""     // set when user picks a local .raw file
     property bool   useLocalImage: false
     property string eveDownloadUrl: ""        // resolved by EveVersionStep.syncState()
-    property int    eveDownloadSize: 0        // file size in bytes (for progress bar)
+    property double eveDownloadSize: 0        // file size in bytes (for progress bar, double avoids int32 overflow)
     property bool   eveIsIsoImage: false      // true = ISO asset (no config customization)
 
     // ── EVE device configuration ──────────────────────────────────────────
@@ -111,10 +111,11 @@ Item {
         gateway:            "",
         dns:                "",
         proxyUrl:           "",
+        wifiSsid:           "",   // WiFi SSID
+        wifiPassword:       "",   // WiFi pre-shared key
         rootCertPath:       "",   // root-certificate.pem (controller CA)
-        onboardCertPath:    "",
-        onboardKeyPath:     "",
-        deviceSerial:       "",
+        onboardCertPath:    "",   // onboard.cert.pem
+        onboardKeyPath:     "",   // onboard.key.pem
         authorizedKeys:     "",   // authorized_keys (SSH public key text)
         installDisk:        "",   // eve_install_disk grub param
         persistDisk:        "",   // eve_persist_disk grub param
@@ -185,6 +186,11 @@ Item {
             writeAnotherMode = false
         }
 
+        // ISO images: skip the customization step — config cannot be applied to ISOs
+        if (next === stepEveCustomization && root.eveIsIsoImage) {
+            next = stepWriting
+        }
+
         markStepPermissible(next)
         root.currentStep = next
         var comp = getStepComponent(next)
@@ -193,8 +199,15 @@ Item {
 
     function previousStep() {
         if (root.currentStep <= 0) return
-        root.currentStep--
-        var comp = getStepComponent(root.currentStep)
+        var prev = root.currentStep - 1
+
+        // ISO images: skip back over the customization step
+        if (prev === stepEveCustomization && root.eveIsIsoImage) {
+            prev = stepStorageSelection
+        }
+
+        root.currentStep = prev
+        var comp = getStepComponent(prev)
         if (comp) { wizardStack.clear(); wizardStack.push(comp) }
     }
 
@@ -247,14 +260,73 @@ Item {
             border.color: Style.sidebarBorderColour
             border.width: 0
 
+            // ── Logo header ──────────────────────────────────────────────
+            Item {
+                id: sidebarLogoHeader
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                height: logoHeaderColumn.implicitHeight + Style.cardPadding * 2 + 1 // +1 for separator
+
+                ColumnLayout {
+                    id: logoHeaderColumn
+                    anchors.top: parent.top
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.topMargin: Style.cardPadding
+                    anchors.leftMargin: Style.scaled(20)
+                    anchors.rightMargin: Style.scaled(20)
+                    spacing: Style.scaled(3)
+
+                    // EVE wordmark PNG (612×258, exact reference logo)
+                    Image {
+                        id: eveWordmarkImage
+                        source: "../icons/eve-wordmark.png"
+                        // Width = 65% of sidebar content, capped at 150px
+                        property real logoWidth: Math.min(
+                            150,
+                            Math.round((root.sidebarWidthValue - Style.scaled(40)) * 0.65))
+                        Layout.preferredWidth:  logoWidth
+                        Layout.preferredHeight: Math.max(1, Math.round(logoWidth * 258 / 612))
+                        Layout.alignment: Qt.AlignHCenter
+                        fillMode: Image.PreserveAspectFit
+                        smooth: true
+                        antialiasing: true
+                    }
+
+                    // Subtitle
+                    Text {
+                        text: qsTr("EVE Installer")
+                        font.family: Style.fontFamily
+                        font.pointSize: Style.fontSizeDescription
+                        font.letterSpacing: Style.scaled(2)
+                        color: Style.zededaNavy
+                        opacity: 0.55
+                        Layout.fillWidth: true
+                        horizontalAlignment: Text.AlignHCenter
+                    }
+                }
+
+                // Bottom separator line
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    height: 1
+                    color: Style.titleSeparatorColor
+                }
+            }
+
             Flickable {
                 id: sidebarScroll
                 clip: true
                 anchors.left: parent.left
                 anchors.right: parent.right
-                anchors.top: parent.top
+                anchors.top: sidebarLogoHeader.bottom
                 anchors.bottom: sidebarBottom.top
-                anchors.margins: Style.cardPadding
+                anchors.topMargin: Style.cardPadding
+                anchors.leftMargin: Style.cardPadding
+                anchors.rightMargin: Style.cardPadding
                 contentWidth: -1
                 contentHeight: sidebarColumn.implicitHeight
                 z: 1
@@ -265,13 +337,12 @@ Item {
                     spacing: Style.spacingXSmall
                     anchors.rightMargin: (sidebarScroll.contentHeight > sidebarScroll.height ? Style.scrollBarWidth : 0)
 
-                    // Header
+                    // Steps label
                     Text {
                         text: qsTr("Setup steps")
-                        font.pointSize: Style.fontSizeHeading
-                        font.family: Style.fontFamilyBold
-                        font.bold: true
-                        color: Style.sidebarTextOnInactiveColor
+                        font.pointSize: Style.fontSizeDescription
+                        font.family: Style.fontFamily
+                        color: Style.sidebarTextDisabledColor
                         Layout.fillWidth: true
                         Layout.bottomMargin: Style.spacingSmall
                         Accessible.role: Accessible.Heading

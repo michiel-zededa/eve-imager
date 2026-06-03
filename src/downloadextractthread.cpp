@@ -302,9 +302,16 @@ void DownloadExtractThread::extractImageRun()
     struct archive_entry *entry;
     int r;
 
-    archive_read_support_filter_all(a);
-    archive_read_support_format_all(a);
-    archive_read_support_format_raw(a); // for .gz and such
+    archive_read_support_filter_all(a);   // decompress gz, xz, bz2, zstd, lz4, etc.
+    archive_read_support_format_zip(a);   // .zip archives containing disk images
+    archive_read_support_format_raw(a);   // raw images: .raw, .img, .iso (catch-all fallback)
+    // NOTE: archive_read_support_format_all() is intentionally NOT called here.
+    // format_all includes ISO 9660, which causes libarchive to "extract" .iso files
+    // entry-by-entry instead of writing the raw binary to the USB device. The first
+    // ISO 9660 directory entry returns 0 bytes, which breaks the write loop immediately
+    // and emits success() with nothing written. Using format_zip + format_raw gives
+    // correct behaviour: ZIP archives are extracted, everything else (including .iso
+    // and .raw) is passed through as raw binary via the format_raw fallback.
     
     // Configure decompression options for optimal performance
     // Note: These options are hints - libarchive ignores unsupported ones

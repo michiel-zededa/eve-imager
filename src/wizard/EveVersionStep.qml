@@ -45,7 +45,7 @@ WizardStepBase {
         id: releaseFetcher
 
         onReleasesReady: {
-            // Restore prior version selection after a fetch
+            // Restore prior version selection after a fetch (initial load only).
             var savedVersion = root.wizardContainer.eveVersion
             if (savedVersion.length > 0) {
                 var idx = releaseFetcher.versions.indexOf(savedVersion)
@@ -290,13 +290,51 @@ WizardStepBase {
                         }
                     }
 
-                    // Asset preview badge
+                    // ISO warning — config customization not supported for ISO assets
+                    Rectangle {
+                        id: isoWarning
+                        Layout.fillWidth: true
+                        color: "#fff3cd"
+                        radius: Style.sectionBorderRadius
+                        implicitHeight: isoWarningText.implicitHeight + Style.spacingSmall * 2
+                        visible: {
+                            if (releaseFetcher.loading || root.platformModel.length === 0) return false
+                            var v = versionCombo.currentIndex >= 0 ? releaseFetcher.versions[versionCombo.currentIndex] : ""
+                            var a = archCombo.currentIndex >= 0 ? root.archModel[archCombo.currentIndex] : ""
+                            var h = hvCombo.currentIndex >= 0 ? root.hvModel[hvCombo.currentIndex] : ""
+                            var p = platformCombo.currentIndex >= 0 ? root.platformModel[platformCombo.currentIndex] : ""
+                            return v.length > 0 && a.length > 0 && h.length > 0 && p.length > 0
+                                   && releaseFetcher.isIsoAsset(v, a, h, p)
+                        }
+
+                        Text {
+                            id: isoWarningText
+                            anchors {
+                                left: parent.left; right: parent.right
+                                top: parent.top; bottom: parent.bottom
+                                margins: Style.spacingSmall
+                            }
+                            text: qsTr("Note: This combination is only available as an ISO image. "
+                                       + "The image will be written to USB as a bootable installer, "
+                                       + "but custom configuration (controller URL, network settings) "
+                                       + "cannot be applied to ISO images.")
+                            font.family: Style.fontFamily
+                            font.pointSize: Style.fontSizeDescription
+                            color: "#856404"
+                            wrapMode: Text.WordWrap
+                        }
+                    }
+
+                    // Spacer — pushes asset preview badge down to the bottom
+                    Item { Layout.fillHeight: true }
+
+                    // Asset preview badge — pinned at the bottom of the content area
                     Rectangle {
                         id: assetPreview
                         Layout.fillWidth: true
                         color: Style.zededaLightBlue
                         radius: Style.sectionBorderRadius
-                        height: assetLabel.implicitHeight + Style.spacingSmall * 2
+                        implicitHeight: assetLabel.implicitHeight + Style.spacingSmall * 2
                         visible: !releaseFetcher.loading
                                  && versionCombo.currentIndex >= 0
                                  && archCombo.currentIndex >= 0
@@ -308,7 +346,8 @@ WizardStepBase {
                             id: assetLabel
                             anchors {
                                 left: parent.left; right: parent.right
-                                top: parent.top; margins: Style.spacingSmall
+                                top: parent.top; bottom: parent.bottom
+                                margins: Style.spacingSmall
                             }
                             text: {
                                 if (!assetPreview.visible) return ""
@@ -326,44 +365,9 @@ WizardStepBase {
                             font.pointSize: Style.fontSizeDescription
                             color: Style.zededaNavy
                             wrapMode: Text.WordWrap
+                            verticalAlignment: Text.AlignVCenter
                         }
                     }
-
-                    // ISO warning — config customization not supported for ISO assets
-                    Rectangle {
-                        id: isoWarning
-                        Layout.fillWidth: true
-                        color: "#fff3cd"
-                        radius: Style.sectionBorderRadius
-                        height: isoWarningText.implicitHeight + Style.spacingSmall * 2
-                        visible: {
-                            if (releaseFetcher.loading || root.platformModel.length === 0) return false
-                            var v = versionCombo.currentIndex >= 0 ? releaseFetcher.versions[versionCombo.currentIndex] : ""
-                            var a = archCombo.currentIndex >= 0 ? root.archModel[archCombo.currentIndex] : ""
-                            var h = hvCombo.currentIndex >= 0 ? root.hvModel[hvCombo.currentIndex] : ""
-                            var p = platformCombo.currentIndex >= 0 ? root.platformModel[platformCombo.currentIndex] : ""
-                            return v.length > 0 && a.length > 0 && h.length > 0 && p.length > 0
-                                   && releaseFetcher.isIsoAsset(v, a, h, p)
-                        }
-
-                        Text {
-                            id: isoWarningText
-                            anchors {
-                                left: parent.left; right: parent.right
-                                top: parent.top; margins: Style.spacingSmall
-                            }
-                            text: qsTr("Note: This combination is only available as an ISO image. "
-                                       + "The image will be written to USB as a bootable installer, "
-                                       + "but custom configuration (controller URL, network settings) "
-                                       + "cannot be applied to ISO images.")
-                            font.family: Style.fontFamily
-                            font.pointSize: Style.fontSizeDescription
-                            color: "#856404"
-                            wrapMode: Text.WordWrap
-                        }
-                    }
-
-                    Item { Layout.fillHeight: true }
                 } // Download pane
 
                 // ── Local image pane ──────────────────────────────────────
@@ -373,8 +377,8 @@ WizardStepBase {
                     Item { height: Style.spacingSmall }
 
                     WizardDescriptionText {
-                        text: qsTr("Select a locally downloaded EVE OS installer image (.raw format). "
-                                   + "Customization options will be applied before writing.")
+                        text: qsTr("Select a locally downloaded EVE OS installer image (.raw or .iso). "
+                                   + "Config customization is supported for .raw images only.")
                         Layout.fillWidth: true
                     }
 
@@ -385,7 +389,7 @@ WizardStepBase {
                         ImTextField {
                             id: localPathField
                             Layout.fillWidth: true
-                            placeholderText: qsTr("Path to .raw image file…")
+                            placeholderText: qsTr("Path to .raw or .iso image file…")
                             readOnly: true
                             text: root.wizardContainer.eveLocalImagePath
                         }
@@ -408,11 +412,12 @@ WizardStepBase {
         parent: Overlay.overlay
         anchors.centerIn: parent
         title: qsTr("Select EVE OS installer image")
-        nameFilters: ["Raw disk images (*.raw)", "All files (*)"]
+        nameFilters: ["EVE OS installer images (*.raw *.iso)", "Raw disk images (*.raw)", "ISO images (*.iso)", "All files (*)"]
         onAccepted: {
             var path = selectedFile.toString().replace(/^(file:\/{2,3})/, "")
             root.wizardContainer.eveLocalImagePath = path
             root.wizardContainer.useLocalImage = true
+            root.wizardContainer.eveIsIsoImage = path.toLowerCase().endsWith(".iso")
             root.wizardContainer.selectedOsName = qsTr("Local image: %1").arg(path.split("/").pop())
         }
     }

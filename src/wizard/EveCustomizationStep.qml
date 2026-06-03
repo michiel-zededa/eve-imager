@@ -7,6 +7,7 @@
 
 pragma ComponentBehavior: Bound
 
+import QtCore
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -102,31 +103,6 @@ WizardStepBase {
                             }
                         }
 
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: Style.spacingSmall
-                            WizardFormLabel {
-                                text: qsTr("Controller CA cert")
-                                Layout.preferredWidth: Style.scaled(140)
-                            }
-                            ImTextField {
-                                id: rootCertField
-                                Layout.fillWidth: true
-                                readOnly: true
-                                placeholderText: qsTr("root-certificate.pem  (optional)")
-                                text: root.wizardContainer.eveConfig.rootCertPath
-                            }
-                            ImButton {
-                                text: qsTr("Browse…")
-                                onClicked: rootCertPicker.open()
-                            }
-                        }
-
-                        WizardDescriptionText {
-                            text: qsTr("The CA certificate used to verify TLS connections to your controller. "
-                                       + "Required for self-hosted or private controller deployments.")
-                            Layout.fillWidth: true
-                        }
                     }
                 }
 
@@ -235,9 +211,9 @@ WizardStepBase {
                     }
                 }
 
-                // ── Device identity ───────────────────────────────────────────
+                // ── WiFi ──────────────────────────────────────────────────────
                 Text {
-                    text: qsTr("Device identity")
+                    text: qsTr("WiFi")
                     font.pointSize: Style.fontSizeHeading
                     font.family: Style.fontFamilyBold
                     font.bold: true
@@ -252,106 +228,35 @@ WizardStepBase {
                         spacing: Style.formRowSpacing
 
                         WizardDescriptionText {
-                            text: qsTr("Pre-provision this device with a known identity. "
-                                       + "The onboarding certificate must be pre-registered in your controller.")
+                            text: qsTr("Configure a WiFi network for EVE to use on first boot. "
+                                       + "Leave blank to use wired Ethernet only.")
                             Layout.fillWidth: true
                         }
 
                         RowLayout {
                             Layout.fillWidth: true
                             spacing: Style.spacingSmall
-                            WizardFormLabel { text: qsTr("Certificate (.pem)"); Layout.preferredWidth: Style.scaled(140) }
-                            ImTextField {
-                                id: certPathField
-                                Layout.fillWidth: true
-                                readOnly: true
-                                placeholderText: qsTr("onboard.cert.pem  (optional)")
-                                text: root.wizardContainer.eveConfig.onboardCertPath
-                            }
-                            ImButton { text: qsTr("Browse…"); onClicked: certFilePicker.open() }
-                        }
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: Style.spacingSmall
-                            WizardFormLabel { text: qsTr("Private key (.pem)"); Layout.preferredWidth: Style.scaled(140) }
-                            ImTextField {
-                                id: keyPathField
-                                Layout.fillWidth: true
-                                readOnly: true
-                                placeholderText: qsTr("onboard.key.pem  (optional)")
-                                text: root.wizardContainer.eveConfig.onboardKeyPath
-                            }
-                            ImButton { text: qsTr("Browse…"); onClicked: keyFilePicker.open() }
-                        }
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: Style.spacingSmall
-                            WizardFormLabel { text: qsTr("Device serial"); Layout.preferredWidth: Style.scaled(140) }
+                            WizardFormLabel { text: qsTr("SSID"); Layout.preferredWidth: Style.scaled(140) }
                             ImTextField {
                                 Layout.fillWidth: true
-                                placeholderText: qsTr("Soft serial number  (optional, auto-generated if blank)")
-                                text: root.wizardContainer.eveConfig.deviceSerial
-                                onTextChanged: root.setCfg("deviceSerial", text)
+                                placeholderText: qsTr("Network name  (optional)")
+                                text: root.wizardContainer.eveConfig.wifiSsid
+                                inputMethodHints: Qt.ImhNoPredictiveText
+                                onTextChanged: root.setCfg("wifiSsid", text)
                             }
-                        }
-                    }
-                }
-
-                // ── SSH access ────────────────────────────────────────────────
-                Text {
-                    text: qsTr("SSH access")
-                    font.pointSize: Style.fontSizeHeading
-                    font.family: Style.fontFamilyBold
-                    font.bold: true
-                    color: Style.zededaNavy
-                    Layout.fillWidth: true
-                    Layout.topMargin: Style.spacingSmall
-                }
-
-                WizardSectionContainer {
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: Style.formRowSpacing
-
-                        WizardDescriptionText {
-                            text: qsTr("Add an SSH public key to enable debug console access on the device. "
-                                       + "Paste the key below or load it from a file.")
-                            Layout.fillWidth: true
                         }
 
                         RowLayout {
                             Layout.fillWidth: true
                             spacing: Style.spacingSmall
-
-                            ScrollView {
+                            WizardFormLabel { text: qsTr("Password"); Layout.preferredWidth: Style.scaled(140) }
+                            ImTextField {
                                 Layout.fillWidth: true
-                                Layout.preferredHeight: Style.scaled(70)
-                                clip: true
-
-                                TextArea {
-                                    id: authorizedKeysArea
-                                    placeholderText: qsTr("ssh-ed25519 AAAA… user@host  (optional)")
-                                    text: root.wizardContainer.eveConfig.authorizedKeys
-                                    font.family: "Menlo, Monaco, Courier New, monospace"
-                                    font.pointSize: Style.fontSizeDescription
-                                    wrapMode: TextArea.Wrap
-                                    onTextChanged: root.setCfg("authorizedKeys", text)
-                                    background: Rectangle {
-                                        color: Style.inputBackgroundColor
-                                        border.color: authorizedKeysArea.activeFocus
-                                                      ? Style.inputBorderFocusColor
-                                                      : Style.inputBorderColor
-                                        radius: Style.inputBorderRadius
-                                    }
-                                }
-                            }
-
-                            ImButton {
-                                text: qsTr("Load file…")
-                                onClicked: sshKeyFilePicker.open()
-                                Layout.alignment: Qt.AlignTop
+                                placeholderText: qsTr("WPA2 passphrase  (optional)")
+                                text: root.wizardContainer.eveConfig.wifiPassword
+                                echoMode: TextInput.Password
+                                inputMethodHints: Qt.ImhNoPredictiveText | Qt.ImhSensitiveData
+                                onTextChanged: root.setCfg("wifiPassword", text)
                             }
                         }
                     }
@@ -427,66 +332,4 @@ WizardStepBase {
         }
     ] // content:
 
-    // ── File dialogs ──────────────────────────────────────────────────────────
-
-    ImFileDialog {
-        id: rootCertPicker
-        parent: Overlay.overlay
-        anchors.centerIn: parent
-        title: qsTr("Select controller CA certificate")
-        nameFilters: ["PEM / CRT files (*.pem *.crt)", "All files (*)"]
-        onAccepted: {
-            var path = selectedFile.toString().replace(/^(file:\/{2,3})/, "")
-            root.setCfg("rootCertPath", path)
-            rootCertField.text = path
-        }
-    }
-
-    ImFileDialog {
-        id: certFilePicker
-        parent: Overlay.overlay
-        anchors.centerIn: parent
-        title: qsTr("Select onboarding certificate")
-        nameFilters: ["PEM files (*.pem *.crt)", "All files (*)"]
-        onAccepted: {
-            var path = selectedFile.toString().replace(/^(file:\/{2,3})/, "")
-            root.setCfg("onboardCertPath", path)
-            certPathField.text = path
-        }
-    }
-
-    ImFileDialog {
-        id: keyFilePicker
-        parent: Overlay.overlay
-        anchors.centerIn: parent
-        title: qsTr("Select onboarding private key")
-        nameFilters: ["PEM files (*.pem *.key)", "All files (*)"]
-        onAccepted: {
-            var path = selectedFile.toString().replace(/^(file:\/{2,3})/, "")
-            root.setCfg("onboardKeyPath", path)
-            keyPathField.text = path
-        }
-    }
-
-    ImFileDialog {
-        id: sshKeyFilePicker
-        parent: Overlay.overlay
-        anchors.centerIn: parent
-        title: qsTr("Select SSH public key")
-        nameFilters: ["Public key files (*.pub)", "All files (*)"]
-        onAccepted: {
-            var path = selectedFile.toString().replace(/^(file:\/{2,3})/, "")
-            // Read the file content and put it in the text area
-            var xhr = new XMLHttpRequest()
-            xhr.open("GET", selectedFile.toString())
-            xhr.onreadystatechange = function() {
-                if (xhr.readyState === XMLHttpRequest.DONE) {
-                    var key = xhr.responseText.trim()
-                    root.setCfg("authorizedKeys", key)
-                    authorizedKeysArea.text = key
-                }
-            }
-            xhr.send()
-        }
-    }
 }

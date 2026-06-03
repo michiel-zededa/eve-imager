@@ -25,6 +25,10 @@ BaseDialog {
     property bool isSaveDialog: false
     property string suggestedFilename: ""
 
+    // When true, hidden files and folders (dot-files) are shown in the listing.
+    // Enable for dialogs where keys/certs may live in hidden dirs (e.g. ~/.ssh).
+    property bool showHiddenFiles: false
+
     // Use Dialog's built-in accepted/rejected signals; do not redeclare to avoid overrides
 
     property string _currentFilename: suggestedFilename
@@ -153,6 +157,7 @@ BaseDialog {
         showDirs: true
         showFiles: true
         showDotAndDotDot: true
+        showHidden: dialog.showHiddenFiles
         nameFilters: dialog._extractGlobs(dialog.nameFilters)
         sortField: FolderListModel.Name
         sortReversed: false
@@ -165,6 +170,7 @@ BaseDialog {
         showDirs: true
         showFiles: false
         showDotAndDotDot: false
+        showHidden: dialog.showHiddenFiles
         sortField: FolderListModel.Name
         sortReversed: false
         nameFilters: ["*"]
@@ -177,6 +183,7 @@ BaseDialog {
         showDirs: false
         showFiles: true
         showDotAndDotDot: false
+        showHidden: dialog.showHiddenFiles
         sortField: FolderListModel.Name
         sortReversed: false
         nameFilters: dialog._getImageGlobs(dialog.nameFilters)
