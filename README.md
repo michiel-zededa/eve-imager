@@ -1,8 +1,8 @@
-# EVE Installer
+# EVE Imager
 
 A graphical tool for writing [LF Edge EVE OS](https://github.com/lf-edge/eve) installer images to USB drives. Built on top of [Raspberry Pi Imager](https://github.com/raspberrypi/rpi-imager).
 
-EVE Installer downloads EVE OS releases directly from GitHub, lets you configure device settings (controller URL, network, WiFi), writes the image to a USB drive, and verifies the result — all in one guided workflow.
+EVE Imager downloads EVE OS releases directly from GitHub, lets you configure device settings (controller URL, network, WiFi), writes the image to a USB drive, and verifies the result — all in one guided workflow.
 
 ---
 
@@ -175,7 +175,7 @@ src/
 
 ## Based on
 
-EVE Installer is a fork of [Raspberry Pi Imager](https://github.com/raspberrypi/rpi-imager) (Apache 2.0).  
+EVE Imager is a fork of [Raspberry Pi Imager](https://github.com/raspberrypi/rpi-imager) (Apache 2.0).  
 The core write engine, FAT partition handling, and cross-platform build system are inherited from that project.
 
 ---
