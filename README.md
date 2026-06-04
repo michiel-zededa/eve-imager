@@ -11,7 +11,7 @@ EVE Imager downloads EVE OS releases directly from GitHub, lets you configure de
 - **Live release browser** — paginates all EVE OS releases from [lf-edge/eve GitHub releases](https://github.com/lf-edge/eve/releases), showing one entry per major version sorted highest first (16.x, 14.x, 13.x, …)
 - **LTS filter** — shows only the latest LTS release per major version; prefers the release with arm64 support when available; use the _Use local image file_ tab for non-LTS builds
 - **Cascading selection** — choose Version → Architecture → Hypervisor → Platform; only combinations that actually have installer assets are shown
-- **Multi-format support** — handles `.installer.raw`, `.installer.raw.zst` (zstd-compressed, decompressed on the fly), and `.installer.iso`; prefers uncompressed raw over compressed over ISO; ISO images skip the config customization step. Note: older `.installer.img` assets (netboot/PXE format) are not USB-writable and are excluded
+- **Multi-format support** — handles `.installer.raw`, `.installer.raw.zst` (zstd-compressed), `.installer.img` (gzip-compressed, used by older EVE ≤12.x releases), and `.installer.iso`; all formats are decompressed on the fly; ISO images skip the config customization step
 - **Device configuration** — optionally pre-configure the device before writing (RAW images only):
   - Controller URL
   - Network mode: DHCP or static IP (address, gateway, DNS)

@@ -196,33 +196,36 @@ int EveReleaseFetcher::parseReleases(const QByteArray &json)
             // Accept installer assets in all supported formats:
             //   .installer.raw      — uncompressed raw image (preferred)
             //   .installer.raw.zst  — zstd-compressed raw (libarchive decompresses on the fly)
+            //   .installer.img      — gzip-compressed raw image used by older EVE releases (≤12.x);
+            //                         same disk image content as .raw, libarchive decompresses it
             //   .installer.iso      — ISO image (no config-partition customization)
-            // Rejected:
-            //   .installer.img      — gzip-compressed netboot/PXE image (NOT a raw disk image;
-            //                         decompressed content is not sector-aligned and cannot be
-            //                         written to USB). Older EVE releases (≤12.x) used this.
-            //   .installer-net.tar  — network installer archive, not USB-writable
+            // Rejected: .installer-net.tar (network installer archive, not USB-writable)
             bool isRawZst = name.endsWith(QLatin1String(".installer.raw.zst"));
-            bool isRaw    = !isRawZst && name.endsWith(QLatin1String(".installer.raw"));
+            bool isRaw    = !isRawZst && (name.endsWith(QLatin1String(".installer.raw"))
+                                       || name.endsWith(QLatin1String(".installer.img")));
             bool isIso    = !isRaw && !isRawZst && name.endsWith(QLatin1String(".installer.iso"));
             if (!isRaw && !isRawZst && !isIso)
                 continue;
 
-            // Determine suffix length to strip to get "{arch}.{hv}.{platform}" prefix
+            // Determine suffix length to strip to get "{arch}[.{hv}.{platform}]" prefix
             int suffixLen;
             if (isRawZst)  suffixLen = QStringLiteral(".installer.raw.zst").length();
             else if (isIso) suffixLen = QStringLiteral(".installer.iso").length();
-            else            suffixLen = QStringLiteral(".installer.raw").length();
-            // Format: {arch}.{hv}.{platform}.installer.{raw|raw.zst|iso}
+            else if (name.endsWith(QLatin1String(".installer.img")))
+                           suffixLen = QStringLiteral(".installer.img").length();
+            else           suffixLen = QStringLiteral(".installer.raw").length();
+
+            // Modern: {arch}.{hv}.{platform}.installer.*  (≥3 parts)
+            // Legacy:  {arch}.installer.img                (1 part, older EVE ≤12.x)
             QString prefix = name.chopped(suffixLen);
             QStringList parts = prefix.split(QLatin1Char('.'));
-            if (parts.size() < 3)
+            if (parts.isEmpty())
                 continue;
 
             AssetInfo asset;
-            asset.arch        = parts[0];
-            asset.hypervisor  = parts[1];
-            asset.platform    = parts.mid(2).join(QLatin1Char('.'));
+            asset.arch       = parts[0];
+            asset.hypervisor = parts.size() >= 2 ? parts[1] : QStringLiteral("kvm");
+            asset.platform   = parts.size() >= 3 ? parts.mid(2).join(QLatin1Char('.')) : QStringLiteral("generic");
             asset.downloadUrl = ao["browser_download_url"].toString();
             asset.size        = ao["size"].toVariant().toLongLong();
             asset.isIso       = isIso;
