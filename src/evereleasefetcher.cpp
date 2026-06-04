@@ -230,6 +230,12 @@ int EveReleaseFetcher::parseReleases(const QByteArray &json)
             asset.size        = ao["size"].toVariant().toLongLong();
             asset.isIso       = isIso;
 
+            // Sanity-check: a real EVE installer is always >250 MB even when compressed.
+            // Tiny assets in old releases are bootstrap/netboot files, not full disk images.
+            static constexpr qint64 MIN_INSTALLER_BYTES = 250LL * 1024 * 1024; // 250 MB
+            if (asset.size > 0 && asset.size < MIN_INSTALLER_BYTES)
+                continue;
+
             // Priority: .raw (1) > .raw.zst (2) > .iso (3)
             // For each arch/hv/platform combo keep only the highest-priority asset.
             int newPriority = isRaw ? 1 : isRawZst ? 2 : 3;
