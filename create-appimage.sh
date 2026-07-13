@@ -68,6 +68,12 @@ CMAKE_FILE="${SOURCE_DIR}CMakeLists.txt"
 # Get version from git tag (same approach as CMake)
 GIT_VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "0.0.0-unknown")
 
+# Explicit override (e.g. CI backfilling a specific release tag onto a build
+# made from a later commit). When set, it wins over `git describe`.
+if [ -n "$IMAGER_VERSION_OVERRIDE" ]; then
+    GIT_VERSION="$IMAGER_VERSION_OVERRIDE"
+fi
+
 # Extract numeric version components for compatibility
 # Match versions like: v1.2.3, 1.2.3, v1.2.3-extra, etc.
 MAJOR=$(echo "$GIT_VERSION" | sed -n 's/^v\{0,1\}\([0-9]\{1,\}\)\.[0-9]\{1,\}\.[0-9]\{1,\}.*/\1/p')
@@ -241,6 +247,12 @@ fi
 # Add Qt path to CMake flags
 CMAKE_EXTRA_FLAGS="$CMAKE_EXTRA_FLAGS -DQt6_ROOT=$QT_DIR"
 
+# Propagate an explicit version override into the build so the compiled-in
+# version string matches the AppImage filename.
+if [ -n "$IMAGER_VERSION_OVERRIDE" ]; then
+    CMAKE_EXTRA_FLAGS="$CMAKE_EXTRA_FLAGS -DIMAGER_VERSION_OVERRIDE=$IMAGER_VERSION_OVERRIDE"
+fi
+
 # shellcheck disable=SC2086
 cmake "../$SOURCE_DIR" -DCMAKE_BUILD_TYPE="$BUILD_TYPE" -DCMAKE_INSTALL_PREFIX=/usr $CMAKE_EXTRA_FLAGS
 make -j"$(nproc)"
@@ -249,6 +261,14 @@ echo "Creating AppDir..."
 # Install to AppDir
 make DESTDIR="$APPDIR" install
 cd ..
+
+# Fork rename fix: the installed GUI binary is 'eve-imager', but the desktop
+# file inherited from rpi-imager still points Exec= at 'rpi-imager'. Rewrite the
+# Exec line so linuxdeploy and desktop launchers resolve the real binary.
+INSTALLED_DESKTOP="$APPDIR/usr/share/applications/com.raspberrypi.rpi-imager.desktop"
+if [ -f "$INSTALLED_DESKTOP" ]; then
+    sed -i 's|^Exec=.*|Exec=eve-imager %F|' "$INSTALLED_DESKTOP"
+fi
 
 # Copy the desktop file from debian directory
 if [ ! -f "$APPDIR/usr/share/applications/com.raspberrypi.rpi-imager.desktop" ]; then
@@ -315,7 +335,7 @@ if [ "$(id -u)" = "0" ]; then
 fi
 
 # The binary handles privilege elevation internally via pkexec if needed
-exec "${HERE}/usr/bin/rpi-imager" "$@"
+exec "${HERE}/usr/bin/eve-imager" "$@"
 EOF
     chmod +x "$APPDIR/AppRun"
 fi

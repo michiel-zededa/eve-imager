@@ -41,6 +41,7 @@ add_custom_target(generate_version ALL
         -DGIT_EXECUTABLE=${GIT_EXECUTABLE}
         -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
         -DOUTPUT_DIR=${CMAKE_CURRENT_BINARY_DIR}
+        -DIMAGER_VERSION_OVERRIDE=${IMAGER_VERSION_OVERRIDE}
         -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerateVersion.cmake
     BYPRODUCTS
         ${CMAKE_CURRENT_BINARY_DIR}/imager_version.h

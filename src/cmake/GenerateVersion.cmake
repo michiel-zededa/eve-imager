@@ -24,6 +24,12 @@ if(GIT_EXECUTABLE)
     endif()
 endif()
 
+# Explicit override (e.g. CI backfilling a specific release tag onto a build
+# made from a later commit). When set, it wins over `git describe`.
+if(DEFINED IMAGER_VERSION_OVERRIDE AND NOT "${IMAGER_VERSION_OVERRIDE}" STREQUAL "")
+    set(VERSION_STR "${IMAGER_VERSION_OVERRIDE}")
+endif()
+
 # Parse numeric version components (e.g. v2.0.0-rc4-60-geac7c2f0 → 2, 0, 0)
 string(REGEX MATCH "^v?([0-9]+)\\.([0-9]+)\\.([0-9]+)" _match "${VERSION_STR}")
 if(_match)
