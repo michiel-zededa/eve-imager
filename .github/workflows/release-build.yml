@@ -54,7 +54,7 @@ jobs:
             qt_host: linux
             qt_arch: linux_gcc_64
           - arch: aarch64
-            runner: ubuntu-22.04-arm
+            runner: ubuntu-24.04-arm
             qt_host: linux_arm64
             qt_arch: linux_gcc_arm64
     runs-on: ${{ matrix.runner }}
@@ -102,6 +102,13 @@ jobs:
           arch: ${{ matrix.qt_arch }}
           modules: qtimageformats qtshadertools
           cache: true
+
+      - name: Qt/qmake sanity check
+        shell: bash
+        run: |
+          echo "== glibc =="; ldd --version | head -1
+          echo "== ldd qmake =="; ldd "$QT_ROOT_DIR/bin/qmake" || true
+          echo "== qmake -v =="; "$QT_ROOT_DIR/bin/qmake" -v || echo "qmake exited rc=$?"
 
       - name: Build AppImage
         shell: bash
