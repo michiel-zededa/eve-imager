@@ -51,9 +51,11 @@ jobs:
         include:
           - arch: x86_64
             runner: ubuntu-22.04
+            qt_host: linux
             qt_arch: linux_gcc_64
           - arch: aarch64
             runner: ubuntu-22.04-arm
+            qt_host: linux_arm64
             qt_arch: linux_gcc_arm64
     runs-on: ${{ matrix.runner }}
     steps:
@@ -90,7 +92,7 @@ jobs:
         uses: jurplel/install-qt-action@v4
         with:
           version: ${{ env.QT_VERSION }}
-          host: linux
+          host: ${{ matrix.qt_host }}
           target: desktop
           arch: ${{ matrix.qt_arch }}
           modules: qtimageformats qtshadertools
