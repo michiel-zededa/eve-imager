@@ -15,6 +15,12 @@ name: Build release binaries
 on:
   release:
     types: [published]
+  # Temporary: lets the pipeline be validated on the feature branch before it
+  # is merged to the default branch (workflow_dispatch requires the workflow to
+  # exist on the default branch). Removed once builds are green.
+  push:
+    branches:
+      - claude/eve-imager-version-sync-iqhhlp
   workflow_dispatch:
     inputs:
       tag:
