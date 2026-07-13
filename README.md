@@ -33,6 +33,23 @@ EVE Imager downloads EVE OS releases directly from GitHub, lets you configure de
 
 ## Installation
 
+### Download prebuilt binaries (recommended)
+
+Every [GitHub release](https://github.com/michiel-zededa/eve-imager/releases) ships ready-to-run binaries, built automatically by GitHub Actions:
+
+| Platform | Asset | Notes |
+|---|---|---|
+| Linux x86_64 | `EVE-Imager-<version>-linux-x86_64.AppImage` | `chmod +x` then run; needs root for raw device access |
+| Linux arm64 | `EVE-Imager-<version>-linux-aarch64.AppImage` | as above |
+| macOS (universal) | `EVE-Imager-<version>-macOS-universal.dmg` | Apple Silicon + Intel; see the note below |
+| Windows x64 | `EVE-Imager-<version>-windows-x64-setup.exe` | run the installer as Administrator |
+
+> **macOS — the app is not signed with an Apple Developer ID.** The first time you open it, macOS Gatekeeper will refuse to launch it. Either **right-click (or Control-click) the app → Open → Open**, or go to **System Settings → Privacy & Security** and click **Open Anyway**. macOS remembers the exception after that. (Signing/notarization would remove this step but requires a paid Apple Developer account.)
+
+> **Windows** is not signed either, so SmartScreen may warn on first run — choose **More info → Run anyway**.
+
+To build from source instead, follow the platform sections below.
+
 ### macOS (build from source)
 
 Requirements: Xcode command-line tools, CMake ≥ 3.16, Qt 6.x (via Homebrew: `brew install qt`)

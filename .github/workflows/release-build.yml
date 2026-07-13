@@ -1,0 +1,288 @@
+name: Build release binaries
+
+# Builds EVE Imager for Linux (x86_64 + arm64 AppImage), macOS (universal DMG),
+# and Windows (x64 installer), and attaches the artifacts to the GitHub release.
+#
+# Triggers:
+#   * release: published  — builds the released tag and uploads assets to it.
+#   * workflow_dispatch    — manual run. Inputs let you:
+#       - build an arbitrary ref (branch/tag/sha)
+#       - stamp an explicit version onto the binaries (backfill)
+#       - upload the results to an existing release tag
+#     With no inputs it just builds the current branch and publishes the
+#     binaries as workflow artifacts (handy for validating the pipeline).
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to upload the built assets to (e.g. v1.1.5). Leave empty to only publish workflow artifacts."
+        required: false
+        default: ""
+      ref:
+        description: "Git ref to build from (branch/tag/sha). Leave empty to use the tag, or the branch that started the run."
+        required: false
+        default: ""
+      version:
+        description: "Version string to stamp onto the binaries (e.g. v1.1.5). Leave empty to derive it from git describe."
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+env:
+  QT_VERSION: 6.9.1
+
+jobs:
+  linux:
+    name: Linux ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-22.04
+            qt_host: linux
+            qt_arch: linux_gcc_64
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+            qt_host: linux_arm64
+            qt_arch: linux_gcc_arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || github.event.inputs.tag || github.event.release.tag_name || github.ref }}
+          fetch-depth: 0
+
+      - name: Compute build metadata
+        id: meta
+        shell: bash
+        run: |
+          TAG="${{ github.event.inputs.tag }}"
+          [ -z "$TAG" ] && TAG="${{ github.event.release.tag_name }}"
+          VER="${{ github.event.inputs.version }}"
+          LABEL="$TAG"; [ -z "$LABEL" ] && LABEL="$VER"
+          [ -z "$LABEL" ] && LABEL="$(git describe --tags --always)"
+          echo "tag=$TAG"       >> "$GITHUB_OUTPUT"
+          echo "version=$VER"   >> "$GITHUB_OUTPUT"
+          echo "label=$LABEL"   >> "$GITHUB_OUTPUT"
+          echo "Building label=$LABEL tag=$TAG version=$VER"
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          # NB: liburing-dev is deliberately omitted. Ubuntu 22.04 ships
+          # liburing 2.1, which lacks io_uring_sqe_set_data64 / *_cancel64 used
+          # by the io_uring code path; the app compiles its non-io_uring
+          # fallback when liburing is absent. Staying on 22.04 keeps the
+          # AppImage's glibc requirement low for broad compatibility.
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build git pkg-config file \
+            libgnutls28-dev libudev-dev libdbus-1-dev \
+            libgl1-mesa-dev libxkbcommon-dev libvulkan-dev \
+            patchelf desktop-file-utils
+
+      - name: Install Qt ${{ env.QT_VERSION }}
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: ${{ matrix.qt_host }}
+          target: desktop
+          arch: ${{ matrix.qt_arch }}
+          modules: qtimageformats qtshadertools
+          cache: true
+
+      - name: Qt/qmake sanity check
+        shell: bash
+        run: |
+          echo "== glibc =="; ldd --version | head -1
+          echo "== ldd qmake =="; ldd "$QT_ROOT_DIR/bin/qmake" || true
+          echo "== qmake -v =="; "$QT_ROOT_DIR/bin/qmake" -v || echo "qmake exited rc=$?"
+
+      - name: Build AppImage
+        shell: bash
+        env:
+          IMAGER_VERSION_OVERRIDE: ${{ steps.meta.outputs.version }}
+        run: |
+          ./create-appimage.sh --arch=${{ matrix.arch }} --qt-root="$QT_ROOT_DIR"
+
+      - name: Collect artifact
+        shell: bash
+        run: |
+          mkdir -p dist
+          APPIMAGE=$(ls -1 Raspberry_Pi_Imager-*-desktop-${{ matrix.arch }}.AppImage | head -1)
+          OUT="dist/EVE-Imager-${{ steps.meta.outputs.label }}-linux-${{ matrix.arch }}.AppImage"
+          cp "$APPIMAGE" "$OUT"
+          echo "Produced $OUT"
+          ls -la dist
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: eve-imager-linux-${{ matrix.arch }}
+          path: dist/*
+
+      - name: Upload to release
+        if: steps.meta.outputs.tag != ''
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ steps.meta.outputs.tag }}" dist/EVE-Imager-*-linux-${{ matrix.arch }}.AppImage --clobber
+
+  macos:
+    name: macOS universal
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || github.event.inputs.tag || github.event.release.tag_name || github.ref }}
+          fetch-depth: 0
+
+      - name: Compute build metadata
+        id: meta
+        shell: bash
+        run: |
+          TAG="${{ github.event.inputs.tag }}"
+          [ -z "$TAG" ] && TAG="${{ github.event.release.tag_name }}"
+          VER="${{ github.event.inputs.version }}"
+          LABEL="$TAG"; [ -z "$LABEL" ] && LABEL="$VER"
+          [ -z "$LABEL" ] && LABEL="$(git describe --tags --always)"
+          echo "tag=$TAG"       >> "$GITHUB_OUTPUT"
+          echo "version=$VER"   >> "$GITHUB_OUTPUT"
+          echo "label=$LABEL"   >> "$GITHUB_OUTPUT"
+
+      - name: Install Qt ${{ env.QT_VERSION }}
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: mac
+          target: desktop
+          arch: clang_64
+          modules: qtimageformats qtshadertools
+          cache: true
+
+      - name: Build app + DMG
+        shell: bash
+        run: |
+          cmake -S src -B build \
+            -DCMAKE_BUILD_TYPE=MinSizeRel \
+            -DQt6_ROOT="$QT_ROOT_DIR" \
+            -DIMAGER_VERSION_OVERRIDE="${{ steps.meta.outputs.version }}"
+          cmake --build build --parallel
+          cmake --build build --target dmg
+
+      - name: Collect artifact
+        shell: bash
+        run: |
+          mkdir -p dist
+          DMG=$(ls -1 build/EVE-Imager-*.dmg | head -1)
+          OUT="dist/EVE-Imager-${{ steps.meta.outputs.label }}-macOS-universal.dmg"
+          cp "$DMG" "$OUT"
+          ls -la dist
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: eve-imager-macos-universal
+          path: dist/*
+
+      - name: Upload to release
+        if: steps.meta.outputs.tag != ''
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ steps.meta.outputs.tag }}" dist/EVE-Imager-*-macOS-universal.dmg --clobber
+
+  windows:
+    name: Windows x64
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || github.event.inputs.tag || github.event.release.tag_name || github.ref }}
+          fetch-depth: 0
+
+      - name: Compute build metadata
+        id: meta
+        run: |
+          TAG="${{ github.event.inputs.tag }}"
+          [ -z "$TAG" ] && TAG="${{ github.event.release.tag_name }}"
+          VER="${{ github.event.inputs.version }}"
+          LABEL="$TAG"; [ -z "$LABEL" ] && LABEL="$VER"
+          [ -z "$LABEL" ] && LABEL="$(git describe --tags --always)"
+          echo "tag=$TAG"       >> "$GITHUB_OUTPUT"
+          echo "version=$VER"   >> "$GITHUB_OUTPUT"
+          echo "label=$LABEL"   >> "$GITHUB_OUTPUT"
+
+      - name: Install Qt ${{ env.QT_VERSION }} (MinGW)
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: windows
+          target: desktop
+          arch: win64_mingw
+          modules: qtimageformats qtshadertools
+          tools: tools_mingw1310
+          cache: true
+
+      - name: Locate MinGW toolchain
+        run: |
+          TOOLS_DIR="${IQTA_TOOLS:-$QT_ROOT_DIR/../../Tools}"
+          MINGW_ROOT=$(find "$TOOLS_DIR" -maxdepth 1 -type d -name 'mingw*_64' | head -1)
+          if [ -z "$MINGW_ROOT" ]; then
+            echo "Could not locate MinGW under $TOOLS_DIR" >&2
+            find "$TOOLS_DIR" -maxdepth 2 -type d || true
+            exit 1
+          fi
+          echo "MINGW_ROOT=$MINGW_ROOT" >> "$GITHUB_ENV"
+          echo "$MINGW_ROOT/bin" >> "$GITHUB_PATH"
+          echo "Using MinGW at $MINGW_ROOT"
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Build app + installer
+        run: |
+          cmake -S src -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=MinSizeRel \
+            -DCMAKE_C_COMPILER=gcc.exe \
+            -DCMAKE_CXX_COMPILER=g++.exe \
+            -DENABLE_INNO_INSTALLER=ON \
+            -DQt6_ROOT="$QT_ROOT_DIR" \
+            -DMINGW64_ROOT="$MINGW_ROOT" \
+            -DIMAGER_VERSION_OVERRIDE="${{ steps.meta.outputs.version }}"
+          cmake --build build --parallel
+          cmake --build build --target inno_installer
+
+      - name: Collect artifact
+        run: |
+          mkdir -p dist
+          SETUP=$(ls -1 build/installer/imager-*.exe | head -1)
+          OUT="dist/EVE-Imager-${{ steps.meta.outputs.label }}-windows-x64-setup.exe"
+          cp "$SETUP" "$OUT"
+          ls -la dist
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: eve-imager-windows-x64
+          path: dist/*
+
+      - name: Upload to release
+        if: steps.meta.outputs.tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ steps.meta.outputs.tag }}" dist/EVE-Imager-*-windows-x64-setup.exe --clobber

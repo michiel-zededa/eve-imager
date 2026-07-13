@@ -4,7 +4,7 @@
 #define RaspberryPiSoftwareURL "https://www.raspberrypi.com/software"
 #define ImagerRepoRootURL "https://github.com/raspberrypi/rpi-imager"
 #define ImagerRepoIssuesURL "https://github.com/raspberrypi/rpi-imager/issues"
-#define MyAppExeName "rpi-imager.exe"
+#define MyAppExeName "eve-imager.exe"
 
 [Setup]
 AppId={{46C75BF3-E267-4834-AE1D-BEB77E05BFA1}
@@ -92,7 +92,7 @@ Source: "@CMAKE_BINARY_DIR@\deploy\rpi-imager-callback-relay.exe"; DestDir: "{ap
 Source: "@CMAKE_BINARY_DIR@\deploy\license.txt"; DestDir: "{app}"; Flags: ignoreversion
 
 ; Core DLLs
-Source: "@CMAKE_BINARY_DIR@\deploy\D3Dcompiler_47.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "@CMAKE_BINARY_DIR@\deploy\D3Dcompiler_47.dll"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "@CMAKE_BINARY_DIR@\deploy\libgcc_s_seh-1.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "@CMAKE_BINARY_DIR@\deploy\libstdc++-6.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "@CMAKE_BINARY_DIR@\deploy\libwinpthread-1.dll"; DestDir: "{app}"; Flags: ignoreversion
@@ -557,17 +557,17 @@ var
   pid: Integer;
 begin
   // make sure app not running
-  running := FindProcess('rpi-imager.exe', pid);
+  running := FindProcess('eve-imager.exe', pid);
   if running then begin
     if MsgBox('Raspberry Pi Imager is running and needs to be closed before continuing. Close it now?',
               mbConfirmation, MB_YESNO) <> IDYES then
     begin Result := False; Exit; end;
     
-    ShellExec('', 'taskkill.exe', '/IM rpi-imager.exe /F', '', SW_HIDE, ewWaitUntilTerminated, rc);
+    ShellExec('', 'taskkill.exe', '/IM eve-imager.exe /F', '', SW_HIDE, ewWaitUntilTerminated, rc);
     // taskkill may fail if process exited between detection and kill attempt (race condition)
     // Re-check if process is actually still running
     Sleep(500); // Give process time to fully terminate
-    if FindProcess('rpi-imager.exe', pid) then begin
+    if FindProcess('eve-imager.exe', pid) then begin
       MsgBox('Failed to close Raspberry Pi Imager. Please close it manually and try again.', mbError, MB_OK);
       Result := False; Exit;
     end;

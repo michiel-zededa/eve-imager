@@ -6,4 +6,4 @@ rem This is necessary because it is compiled as GUI application, and Windows
 rem normalling does not wait until those exit
 rem
 
-start /WAIT rpi-imager.exe --cli %*
+start /WAIT eve-imager.exe --cli %*
