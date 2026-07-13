@@ -82,9 +82,14 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
+          # NB: liburing-dev is deliberately omitted. Ubuntu 22.04 ships
+          # liburing 2.1, which lacks io_uring_sqe_set_data64 / *_cancel64 used
+          # by the io_uring code path; the app compiles its non-io_uring
+          # fallback when liburing is absent. Staying on 22.04 keeps the
+          # AppImage's glibc requirement low for broad compatibility.
           sudo apt-get install -y --no-install-recommends \
             build-essential cmake ninja-build git pkg-config file \
-            libgnutls28-dev liburing-dev libudev-dev libdbus-1-dev \
+            libgnutls28-dev libudev-dev libdbus-1-dev \
             libgl1-mesa-dev libxkbcommon-dev libvulkan-dev \
             patchelf desktop-file-utils
 
