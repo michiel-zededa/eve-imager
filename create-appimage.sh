@@ -173,7 +173,7 @@ QML_SOURCES_PATH="$PWD/src/qmlcomponents/"
 
 # Location of AppDir and output file
 APPDIR="$PWD/AppDir-$ARCH"
-OUTPUT_FILE="$PWD/Raspberry_Pi_Imager-${GIT_VERSION}-desktop-${ARCH}.AppImage"
+OUTPUT_FILE="$PWD/EVE_Imager-${GIT_VERSION}-desktop-${ARCH}.AppImage"
 
 # Tools directory for downloaded binaries
 TOOLS_DIR="$PWD/appimage-tools"
@@ -427,17 +427,26 @@ export LD_LIBRARY_PATH="$QT_DIR/lib:$LD_LIBRARY_PATH"
     --verbosity=0
 
 # Rename the output file from linuxdeploy's default name to our versioned name
-# linuxdeploy creates: Raspberry_Pi_Imager-${ARCH}.AppImage (based on Name= in desktop file)
-LINUXDEPLOY_OUTPUT="Raspberry_Pi_Imager-${ARCH}.AppImage"
+# linuxdeploy creates: EVE_Imager-${ARCH}.AppImage (based on Name= in desktop file)
+LINUXDEPLOY_OUTPUT="EVE_Imager-${ARCH}.AppImage"
 if [ -f "$LINUXDEPLOY_OUTPUT" ]; then
     echo "Renaming '$LINUXDEPLOY_OUTPUT' to '$(basename "$OUTPUT_FILE")'"
     mv "$LINUXDEPLOY_OUTPUT" "$OUTPUT_FILE"
 elif [ -f "$OUTPUT_FILE" ]; then
     echo "Output file already exists: $OUTPUT_FILE"
 else
-    echo "Warning: Expected linuxdeploy output '$LINUXDEPLOY_OUTPUT' not found"
-    echo "Looking for any matching AppImage..."
-    ls -la ./*.AppImage 2>/dev/null || true
+    # Fallback: linuxdeploy derives the name from the desktop Name= field, so
+    # pick up whatever *.AppImage it produced in the current directory (the
+    # downloaded linuxdeploy tools live in $TOOLS_DIR, not here).
+    echo "Expected '$LINUXDEPLOY_OUTPUT' not found; searching for produced AppImage..."
+    PRODUCED=$(find . -maxdepth 1 -type f -name '*.AppImage' | head -n 1)
+    if [ -n "$PRODUCED" ]; then
+        echo "Renaming '$PRODUCED' to '$(basename "$OUTPUT_FILE")'"
+        mv "$PRODUCED" "$OUTPUT_FILE"
+    else
+        echo "Warning: no AppImage produced by linuxdeploy"
+        ls -la ./*.AppImage 2>/dev/null || true
+    fi
 fi
 
 echo "AppImage created at $OUTPUT_FILE"
