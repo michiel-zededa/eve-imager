@@ -15,6 +15,12 @@ name: Build release binaries
 on:
   release:
     types: [published]
+  # Temporary: validate the rebranded packaging on the feature branch before
+  # merge (workflow_dispatch requires the workflow on the default branch, and
+  # the automation token can't dispatch). Removed once builds are green.
+  push:
+    branches:
+      - claude/eve-imager-version-sync-iqhhlp
   workflow_dispatch:
     inputs:
       tag:
