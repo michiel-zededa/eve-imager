@@ -1,9 +1,9 @@
-#define MyAppName "Raspberry Pi Imager"
+#define MyAppName "EVE Imager"
 #define MyAppVersion "@IMAGER_VERSION_STR@"
-#define MyAppPublisher "Raspberry Pi Ltd"
-#define RaspberryPiSoftwareURL "https://www.raspberrypi.com/software"
-#define ImagerRepoRootURL "https://github.com/raspberrypi/rpi-imager"
-#define ImagerRepoIssuesURL "https://github.com/raspberrypi/rpi-imager/issues"
+#define MyAppPublisher "ZEDEDA, Inc."
+#define RaspberryPiSoftwareURL "https://www.zededa.com"
+#define ImagerRepoRootURL "https://github.com/michiel-zededa/eve-imager"
+#define ImagerRepoIssuesURL "https://github.com/michiel-zededa/eve-imager/issues"
 #define MyAppExeName "eve-imager.exe"
 
 [Setup]
@@ -15,13 +15,15 @@ AppPublisher={#MyAppPublisher}
 AppPublisherURL={#RaspberryPiSoftwareURL}
 AppSupportURL={#ImagerRepoIssuesURL}
 AppUpdatesURL={#ImagerRepoRootURL}
-DefaultDirName={autopf}\{#MyAppPublisher}\Imager
-DefaultGroupName=Raspberry Pi
+DefaultDirName={autopf}\EVE Imager
+DefaultGroupName=EVE Imager
 AllowNoIcons=yes
 LicenseFile=@CMAKE_BINARY_DIR@\deploy\license.txt
 OutputDir=@CMAKE_BINARY_DIR@\installer
 OutputBaseFilename=imager-{#MyAppVersion}
-SetupIconFile=@CMAKE_SOURCE_DIR@\icons\rpi-imager.ico
+SetupIconFile=@CMAKE_SOURCE_DIR@\icons\eve-imager.ico
+WizardImageFile=@CMAKE_SOURCE_DIR@\icons\eve-wizard-image.bmp,@CMAKE_SOURCE_DIR@\icons\eve-wizard-image-2x.bmp
+WizardSmallImageFile=@CMAKE_SOURCE_DIR@\icons\eve-wizard-small.bmp,@CMAKE_SOURCE_DIR@\icons\eve-wizard-small-2x.bmp
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern dynamic
@@ -66,13 +68,13 @@ Root: HKLM; Subkey: "Software\Classes\RPI_IMAGINGUTILITY\shell\open\command"; Va
 ; Extension defined in src/config.h (MANIFEST_EXTENSION)
 Root: HKLM; Subkey: "Software\Classes\.rpi-imager-manifest"; ValueType: string; ValueName: ""; ValueData: "RPI_IMAGER_MANIFEST"; Flags: uninsdeletekey
 Root: HKLM; Subkey: "Software\Classes\.rpi-imager-manifest"; ValueType: string; ValueName: "Content Type"; ValueData: "application/vnd.raspberrypi.imager-manifest+json"; Flags: uninsdeletekey
-Root: HKLM; Subkey: "Software\Classes\RPI_IMAGER_MANIFEST"; ValueType: string; ValueName: ""; ValueData: "Raspberry Pi Imager Manifest"; Flags: uninsdeletekey
+Root: HKLM; Subkey: "Software\Classes\RPI_IMAGER_MANIFEST"; ValueType: string; ValueName: ""; ValueData: "EVE Imager Manifest"; Flags: uninsdeletekey
 Root: HKLM; Subkey: "Software\Classes\RPI_IMAGER_MANIFEST\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#MyAppExeName},0"; Flags: uninsdeletekey
 Root: HKLM; Subkey: "Software\Classes\RPI_IMAGER_MANIFEST\shell\open"; ValueType: string; ValueName: "FriendlyAppName"; ValueData: "{#MyAppName}"; Flags: uninsdeletekey
 Root: HKLM; Subkey: "Software\Classes\RPI_IMAGER_MANIFEST\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Flags: uninsdeletekey
 
 ; Register rpi-imager:// URL protocol handler
-Root: HKCR; Subkey: "rpi-imager"; ValueType: string; ValueName: ""; ValueData: "URL:Raspberry Pi Imager"; Flags: uninsdeletekey
+Root: HKCR; Subkey: "rpi-imager"; ValueType: string; ValueName: ""; ValueData: "URL:EVE Imager"; Flags: uninsdeletekey
 Root: HKCR; Subkey: "rpi-imager"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""; Flags: uninsdeletekey
 Root: HKCR; Subkey: "rpi-imager\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#MyAppExeName},1"; Flags: uninsdeletekey
 Root: HKCR; Subkey: "rpi-imager\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\rpi-imager-callback-relay.exe"" ""%1"""; Flags: uninsdeletekey
@@ -440,7 +442,7 @@ begin
 
   // Old Inno (by old AppId)
   if TryGetOldInnoUninstall(Cmd, Args) then begin
-    if MsgBox('A previous Raspberry Pi Imager installation was detected. It will be removed before continuing. Proceed?',
+    if MsgBox('A previous EVE Imager installation was detected. It will be removed before continuing. Proceed?',
               mbConfirmation, MB_YESNO) <> IDYES then
     begin Result := False; Exit; end;
 
@@ -451,7 +453,7 @@ begin
   end
   // Old NSIS (name-based)
   else if TryGetOldNsisUninstall(Cmd, Args) then begin
-    if MsgBox('A previous Raspberry Pi Imager installation was detected. It will be removed before continuing. Proceed?',
+    if MsgBox('A previous EVE Imager installation was detected. It will be removed before continuing. Proceed?',
               mbConfirmation, MB_YESNO) <> IDYES then
     begin Result := False; Exit; end;
 
@@ -559,7 +561,7 @@ begin
   // make sure app not running
   running := FindProcess('eve-imager.exe', pid);
   if running then begin
-    if MsgBox('Raspberry Pi Imager is running and needs to be closed before continuing. Close it now?',
+    if MsgBox('EVE Imager is running and needs to be closed before continuing. Close it now?',
               mbConfirmation, MB_YESNO) <> IDYES then
     begin Result := False; Exit; end;
     
@@ -568,7 +570,7 @@ begin
     // Re-check if process is actually still running
     Sleep(500); // Give process time to fully terminate
     if FindProcess('eve-imager.exe', pid) then begin
-      MsgBox('Failed to close Raspberry Pi Imager. Please close it manually and try again.', mbError, MB_OK);
+      MsgBox('Failed to close EVE Imager. Please close it manually and try again.', mbError, MB_OK);
       Result := False; Exit;
     end;
   end;

@@ -115,7 +115,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          APPIMAGE=$(ls -1 Raspberry_Pi_Imager-*-desktop-${{ matrix.arch }}.AppImage | head -1)
+          APPIMAGE=$(ls -1 EVE_Imager-*-desktop-${{ matrix.arch }}.AppImage | head -1)
           OUT="dist/EVE-Imager-${{ steps.meta.outputs.label }}-linux-${{ matrix.arch }}.AppImage"
           cp "$APPIMAGE" "$OUT"
           echo "Produced $OUT"
