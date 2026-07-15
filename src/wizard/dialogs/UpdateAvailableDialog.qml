@@ -79,7 +79,7 @@ BaseDialog {
         ImButton {
             id: noButton
             text: CommonStrings.no
-            accessibleDescription: qsTr("Continue using the current version of Raspberry Pi Imager")
+            accessibleDescription: qsTr("Continue using the current version of EVE Imager")
             activeFocusOnTab: true
             onClicked: {
                 root.reject()
@@ -92,7 +92,7 @@ BaseDialog {
             // Make the primary action button wider to encourage clicking
             Layout.minimumWidth: Style.buttonWidthMinimum * 1.5
             implicitWidth: Style.buttonWidthMinimum * 1.5
-            accessibleDescription: qsTr("Open the Raspberry Pi website in your browser to download the latest version")
+            accessibleDescription: qsTr("Open the EVE Imager releases page in your browser to download the latest version")
             activeFocusOnTab: true
             onClicked: {
                 if (root.url && root.url.toString && root.url.toString().length > 0) {
