@@ -39,7 +39,7 @@ Every [GitHub release](https://github.com/michiel-zededa/eve-imager/releases) sh
 
 | Platform | Asset | Notes |
 |---|---|---|
-| Linux x86_64 | `EVE-Imager-<version>-linux-x86_64.AppImage` | `chmod +x` then run; needs root for raw device access |
+| Linux x86_64 | `EVE-Imager-<version>-linux-x86_64.AppImage` | `chmod +x` then run — see the Linux note below |
 | Linux arm64 | `EVE-Imager-<version>-linux-aarch64.AppImage` | as above |
 | macOS (universal) | `EVE-Imager-<version>-macOS-universal.dmg` | Apple Silicon + Intel; see the note below |
 | Windows x64 | `EVE-Imager-<version>-windows-x64-setup.exe` | run the installer as Administrator |
@@ -47,6 +47,24 @@ Every [GitHub release](https://github.com/michiel-zededa/eve-imager/releases) sh
 > **macOS — the app is not signed with an Apple Developer ID.** The first time you open it, macOS Gatekeeper will refuse to launch it. Either **right-click (or Control-click) the app → Open → Open**, or go to **System Settings → Privacy & Security** and click **Open Anyway**. macOS remembers the exception after that. (Signing/notarization would remove this step but requires a paid Apple Developer account.)
 
 > **Windows** is not signed either, so SmartScreen may warn on first run — choose **More info → Run anyway**.
+
+> **Linux — running the AppImage.** Make it executable and run it as your normal user (it elevates itself via `pkexec` only when it needs to write a device — no need to launch it with `sudo`):
+> ```bash
+> chmod +x EVE-Imager-*-linux-*.AppImage
+> ./EVE-Imager-*-linux-*.AppImage
+> ```
+> On a full desktop this just works. On a **minimal or VM install** you may hit `libOpenGL.so.0: cannot open shared object file` (or a similar `libEGL`/`libGL` error) — the OpenGL libraries are GPU-driver-coupled (part of [libglvnd](https://gitlab.freedesktop.org/glvnd/libglvnd)), so the AppImage relies on the host providing them. Install them once, per distro:
+> ```bash
+> # Debian / Ubuntu
+> sudo apt install -y libopengl0 libegl1 libglx0
+>
+> # Fedora / RHEL / CentOS / Rocky / Alma
+> sudo dnf install -y libglvnd-opengl libglvnd-egl libglvnd-glx
+>
+> # openSUSE / SLE
+> sudo zypper install -y libglvnd Mesa-libEGL1 Mesa-libGL1
+> ```
+> If instead you get a FUSE error (`libfuse.so.2` / `fusermount`), install FUSE 2 (`libfuse2` on Debian/Ubuntu, `fuse-libs` on Fedora/RHEL, `libfuse2` on openSUSE) or run the AppImage with `--appimage-extract-and-run`.
 
 To build from source instead, follow the platform sections below.
 
