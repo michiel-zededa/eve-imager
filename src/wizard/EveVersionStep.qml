@@ -115,6 +115,7 @@ WizardStepBase {
         var hasAll = v.length > 0 && a.length > 0 && h.length > 0 && p.length > 0
         root.wizardContainer.eveDownloadUrl  = hasAll ? releaseFetcher.downloadUrl(v, a, h, p) : ""
         root.wizardContainer.eveDownloadSize = hasAll ? releaseFetcher.downloadSize(v, a, h, p) : 0
+        root.wizardContainer.eveIsCompressedImage = hasAll ? releaseFetcher.isCompressedAsset(v, a, h, p) : false
         root.wizardContainer.eveIsIsoImage   = hasAll ? releaseFetcher.isIsoAsset(v, a, h, p) : false
         root.wizardContainer.selectedOsName  = hasAll
                                                ? qsTr("EVE OS %1 · %2/%3/%4").arg(v).arg(a).arg(h).arg(p) : ""
@@ -357,9 +358,14 @@ WizardStepBase {
                                 var p = root.platformModel[platformCombo.currentIndex] || ""
                                 var sz = releaseFetcher.downloadSize(v, a, h, p)
                                 var szStr = sz > 0 ? " (" + (sz / (1024*1024*1024)).toFixed(2) + " GB)" : ""
-                                var ext = releaseFetcher.isIsoAsset(v, a, h, p) ? "installer.iso" : "installer.raw"
-                                return qsTr("Will download: %1.%2.%3.%4%5")
-                                       .arg(a).arg(h).arg(p).arg(ext).arg(szStr)
+                                // Show the real asset name: it may be compressed
+                                // (.installer.raw.zst) rather than a plain .raw.
+                                var fileName = releaseFetcher.assetFileName(v, a, h, p)
+                                if (fileName.length === 0) {
+                                    var ext = releaseFetcher.isIsoAsset(v, a, h, p) ? "installer.iso" : "installer.raw"
+                                    fileName = a + "." + h + "." + p + "." + ext
+                                }
+                                return qsTr("Will download: %1%2").arg(fileName).arg(szStr)
                             }
                             font.family: Style.fontFamily
                             font.pointSize: Style.fontSizeDescription
@@ -436,6 +442,7 @@ WizardStepBase {
             root.wizardContainer.useLocalImage   = true
             root.wizardContainer.eveDownloadUrl  = ""
             root.wizardContainer.eveDownloadSize = 0
+            root.wizardContainer.eveIsCompressedImage = false
             root.wizardContainer.selectedOsName  = root.wizardContainer.eveLocalImagePath.length > 0
                 ? qsTr("Local image: %1").arg(root.wizardContainer.eveLocalImagePath.split("/").pop())
                 : ""

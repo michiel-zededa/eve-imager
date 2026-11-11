@@ -229,6 +229,10 @@ int EveReleaseFetcher::parseReleases(const QByteArray &json)
             asset.downloadUrl = ao["browser_download_url"].toString();
             asset.size        = ao["size"].toVariant().toLongLong();
             asset.isIso       = isIso;
+            // .raw.zst is zstd-compressed and .installer.img is gzip-compressed;
+            // for both, the asset size is the compressed size, not the image size.
+            asset.isCompressed = isRawZst
+                              || name.endsWith(QLatin1String(".installer.img"));
 
             // Sanity-check: a real EVE installer is always >250 MB even when compressed.
             // Tiny assets in old releases are bootstrap/netboot files, not full disk images.
@@ -430,4 +434,22 @@ bool EveReleaseFetcher::isIsoAsset(const QString &version,
 {
     const AssetInfo *a = findAsset(version, arch, hypervisor, platform);
     return a ? a->isIso : false;
+}
+
+bool EveReleaseFetcher::isCompressedAsset(const QString &version,
+                                          const QString &arch,
+                                          const QString &hypervisor,
+                                          const QString &platform) const
+{
+    const AssetInfo *a = findAsset(version, arch, hypervisor, platform);
+    return a ? a->isCompressed : false;
+}
+
+QString EveReleaseFetcher::assetFileName(const QString &version,
+                                         const QString &arch,
+                                         const QString &hypervisor,
+                                         const QString &platform) const
+{
+    const AssetInfo *a = findAsset(version, arch, hypervisor, platform);
+    return a ? QUrl(a->downloadUrl).fileName() : QString();
 }

@@ -524,7 +524,18 @@ void ImageWriter::setSrc(const QUrl &url, quint64 downloadLen, quint64 extrLen, 
     // Gzip ISIZE is 32-bit, so uncompressed size is unreliable for files >4GB.
     // When no trusted extract size is provided by the manifest, mark it so the
     // UI can show indeterminate progress instead of a misleading percentage.
-    _extractSizeKnown = !(!_extrLen && url.toString().toLower().endsWith(".gz"));
+    //
+    // The same applies to remote compressed EVE installer images
+    // (.installer.raw.zst, and the legacy gzip'd .installer.img): the release
+    // metadata only gives the compressed download size, so a percentage
+    // computed against it would be wrong (and exceed 100%). Local compressed
+    // files are excluded here because their size is parsed further below.
+    {
+        const QString lowerUrl = url.toString().toLower();
+        const bool remoteCompressedEveImage = !url.isLocalFile()
+            && (lowerUrl.endsWith(".zst") || lowerUrl.endsWith(".installer.img"));
+        _extractSizeKnown = !(!_extrLen && (lowerUrl.endsWith(".gz") || remoteCompressedEveImage));
+    }
 
     qDebug() << "setSrc: initFormat parameter:" << initFormat << "-> _initFormat set to:" << _initFormat;
 

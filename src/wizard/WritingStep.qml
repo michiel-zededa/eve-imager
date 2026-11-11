@@ -722,9 +722,15 @@ WizardStepBase {
         if (cfg.useLocalImage && cfg.eveLocalImagePath.length > 0) {
             root.imageWriter.setSrc("file://" + cfg.eveLocalImagePath)
         } else if (cfg.eveDownloadUrl.length > 0) {
-            // Use the URL and size resolved by EveVersionStep (Phase 2 live releases)
+            // Use the URL and size resolved by EveVersionStep (Phase 2 live releases).
+            // The GitHub asset size is the *download* size. It only equals the size of
+            // the image written to the device for uncompressed assets (.raw / .iso).
+            // For compressed assets (.raw.zst, legacy .img) the extracted size is not
+            // known up front, so pass 0 ("unknown") rather than the compressed size —
+            // otherwise the writer rejects it as "not a multiple of 512 bytes".
+            var extractSize = cfg.eveIsCompressedImage ? 0 : cfg.eveDownloadSize
             root.imageWriter.setSrc(cfg.eveDownloadUrl,
-                                    cfg.eveDownloadSize, cfg.eveDownloadSize,
+                                    cfg.eveDownloadSize, extractSize,
                                     "", false, "EVE OS", cfg.selectedOsName)
         } else if (cfg.eveVersion.length > 0) {
             // Fallback: construct URL from version/arch/hv/platform

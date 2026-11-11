@@ -39,8 +39,12 @@ class EveReleaseFetcher : public QObject
         QString hypervisor;
         QString platform;
         QString downloadUrl;
-        qint64  size = 0;
+        qint64  size = 0;       // size of the asset as downloaded (compressed size if isCompressed)
         bool    isIso = false;  // true = .installer.iso, false = .installer.raw
+        // true = the download is a compressed stream (.installer.raw.zst, or the
+        // legacy gzip'd .installer.img), so `size` is NOT the size of the disk
+        // image that ends up on the device.
+        bool    isCompressed = false;
     };
 
     struct ReleaseInfo {
@@ -120,6 +124,23 @@ public:
                                 const QString &arch,
                                 const QString &hypervisor,
                                 const QString &platform) const;
+
+    /**
+     * Returns true if the asset for this combination is downloaded compressed
+     * (.installer.raw.zst or legacy .installer.img). For such assets
+     * downloadSize() is the compressed size, and the size of the extracted
+     * disk image is not known up front.
+     */
+    Q_INVOKABLE bool isCompressedAsset(const QString &version,
+                                       const QString &arch,
+                                       const QString &hypervisor,
+                                       const QString &platform) const;
+
+    /** File name of the asset for this combination (e.g. "amd64.k.generic.installer.raw.zst"). */
+    Q_INVOKABLE QString assetFileName(const QString &version,
+                                      const QString &arch,
+                                      const QString &hypervisor,
+                                      const QString &platform) const;
 
 signals:
     void releasesReady();
