@@ -15,6 +15,9 @@ name: Build release binaries
 on:
   release:
     types: [published]
+  # TEMPORARY (PR #6 validation) - remove before merge
+  push:
+    branches: [claude/eve-imager-version-sync-iqhhlp]
   workflow_dispatch:
     inputs:
       tag:
