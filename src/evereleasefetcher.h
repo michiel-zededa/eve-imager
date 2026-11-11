@@ -48,9 +48,14 @@ class EveReleaseFetcher : public QObject
     };
 
     struct ReleaseInfo {
-        QString          version;       // e.g. "12.5.0"
+        QString          version;       // tag name, e.g. "17.0.1-lts"
         QDateTime        publishedAt;   // from GitHub published_at field
-        bool             isLts = false; // true if tag/name contains "lts"
+        bool             isLts = false; // true if the tag has the form X.Y.Z-lts
+        // Parsed from an LTS tag (X.Y.Z-lts); -1 for other releases. X.Y is the
+        // "LTS line"; the highest Z within a line is its newest patch release.
+        int              verMajor = -1;
+        int              verMinor = -1;
+        int              verPatch = -1;
         QList<AssetInfo> assets;
     };
 
@@ -73,8 +78,10 @@ public:
 
     /**
      * Version strings that have at least one installer asset, sorted newest
-     * first.  When showNonLts is false, only LTS-tagged releases are returned
-     * (unless no LTS releases exist, in which case all are returned).
+     * first.  When showNonLts is false, only the newest patch release of each
+     * LTS line (X.Y) is returned (unless no LTS releases exist, in which case
+     * all are returned).  If that newest patch lacks an architecture that an
+     * older patch of the same line still offers, that older patch is listed too.
      */
     Q_PROPERTY(QStringList versions READ versions NOTIFY releasesReady)
     QStringList versions() const;

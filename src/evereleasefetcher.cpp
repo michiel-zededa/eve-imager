@@ -7,9 +7,14 @@
 #include "curlfetcher.h"
 
 #include <QDebug>
+#include <QHash>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QMap>
+#include <QPair>
+#include <QRegularExpression>
+#include <QUrl>
 #include <algorithm>
 
 // GitHub API: 100 releases per page (maximum). EVE has 260+ releases so we
@@ -159,28 +164,14 @@ int EveReleaseFetcher::parseReleases(const QByteArray &json)
         if (tagName.isEmpty())
             continue;
 
-        // Detect LTS:
-        // 1. Explicit: tag or release title contains "lts"
-        // 2. Heuristic: even minor version (X.Y.Z where Y is even).
-        //    EVE follows the common convention that even minor = LTS,
-        //    odd minor = current/edge (e.g. 12.0.x, 12.2.x are LTS;
-        //    12.1.x, 12.3.x are current releases).
-        QString releaseName = ro["name"].toString();
-        bool isLts = tagName.contains(QLatin1String("lts"), Qt::CaseInsensitive)
-                  || releaseName.contains(QLatin1String("lts"), Qt::CaseInsensitive);
-        if (!isLts) {
-            // Strip leading 'v' prefix if present, then parse X.Y.Z
-            QString ver = tagName;
-            if (ver.startsWith(QLatin1Char('v')) || ver.startsWith(QLatin1Char('V')))
-                ver = ver.mid(1);
-            const QStringList parts = ver.split(QLatin1Char('.'));
-            if (parts.size() >= 2) {
-                bool ok = false;
-                int minor = parts.at(1).toInt(&ok);
-                if (ok && (minor % 2 == 0))
-                    isLts = true;
-            }
-        }
+        // Detect LTS: EVE tags its LTS releases "X.Y.Z-lts". That suffix is the
+        // only reliable signal — the minor version's parity is not (14.5.5-lts
+        // is an LTS release with an odd minor), so no guessing from the number.
+        static const QRegularExpression ltsTagRe(
+            QStringLiteral("^v?(\\d+)\\.(\\d+)\\.(\\d+)-lts$"),
+            QRegularExpression::CaseInsensitiveOption);
+        const QRegularExpressionMatch ltsMatch = ltsTagRe.match(tagName);
+        const bool isLts = ltsMatch.hasMatch();
 
         // Parse publication date for chronological sorting
         QDateTime publishedAt = QDateTime::fromString(
@@ -240,9 +231,12 @@ int EveReleaseFetcher::parseReleases(const QByteArray &json)
             if (asset.size > 0 && asset.size < MIN_INSTALLER_BYTES)
                 continue;
 
-            // Priority: .raw (1) > .raw.zst (2) > .iso (3)
+            // Priority: .raw.zst (1) > .raw / legacy .img (2) > .iso (3)
             // For each arch/hv/platform combo keep only the highest-priority asset.
-            int newPriority = isRaw ? 1 : isRawZst ? 2 : 3;
+            // The zstd-compressed raw image is preferred over the plain one: it is
+            // the same disk image, a much smaller download, and it is decompressed
+            // on the fly while writing.
+            int newPriority = isRawZst ? 1 : isRaw ? 2 : 3;
 
             bool replaced = false;
             for (int i = 0; i < assets.size(); ++i) {
@@ -251,7 +245,7 @@ int EveReleaseFetcher::parseReleases(const QByteArray &json)
                     && assets[i].platform == asset.platform) {
                     // Replace existing only if new asset has higher priority
                     int existingPriority = assets[i].isIso ? 3
-                                        : assets[i].downloadUrl.endsWith(QLatin1String(".zst")) ? 2 : 1;
+                                        : assets[i].downloadUrl.endsWith(QLatin1String(".zst")) ? 1 : 2;
                     if (newPriority < existingPriority)
                         assets[i] = asset;
                     replaced = true;
@@ -272,6 +266,11 @@ int EveReleaseFetcher::parseReleases(const QByteArray &json)
         rel.version     = tagName;
         rel.publishedAt = publishedAt;
         rel.isLts       = isLts;
+        if (isLts) {
+            rel.verMajor = ltsMatch.captured(1).toInt();
+            rel.verMinor = ltsMatch.captured(2).toInt();
+            rel.verPatch = ltsMatch.captured(3).toInt();
+        }
         rel.assets      = assets;
         _releases.append(rel);
     }
@@ -291,41 +290,44 @@ QStringList EveReleaseFetcher::versions() const
         if (r.isLts) { anyLts = true; break; }
     }
 
-    // LTS filter active: show the single best LTS release per major version.
-    // "Best" = latest LTS with arm64 assets; fall back to latest LTS with any arch.
-    // Releases are already sorted newest-first, so the first qualifying entry wins.
+    // LTS filter active: show the newest patch release of every LTS line (X.Y).
+    //
+    // "Newest" is decided by the patch number, not the publication date, so a
+    // back-ported patch on an older line cannot shadow anything.
+    //
+    // The newest patch is tracked per architecture: if the newest patch of a
+    // line was published without (say) arm64 assets, the newest older patch
+    // that does have them is listed as well, so no architecture loses access
+    // to a line. In the normal case every architecture agrees and the line
+    // contributes exactly one entry.
     if (!_showNonLts && anyLts) {
-        // Pass 1: latest LTS with arm64 per major
-        QHash<QString, QString> arm64Best;   // major -> version
-        QHash<QString, QString> anyBest;     // major -> version (any arch)
+        struct Pick { int patch = -1; QString version; };
+        // (major, minor) -> arch -> newest patch offering that arch
+        QMap<QPair<int, int>, QHash<QString, Pick>> lines;
         for (const ReleaseInfo &r : _releases) {
             if (!r.isLts) continue;
-            QString ver = r.version;
-            if (ver.startsWith(QLatin1Char('v'), Qt::CaseInsensitive))
-                ver = ver.mid(1);
-            const QString major = ver.section(QLatin1Char('.'), 0, 0);
-            bool hasArm64 = false;
-            for (const AssetInfo &a : r.assets)
-                if (a.arch == QLatin1String("arm64")) { hasArm64 = true; break; }
-            if (!anyBest.contains(major))
-                anyBest[major] = r.version;
-            if (hasArm64 && !arm64Best.contains(major))
-                arm64Best[major] = r.version;
+            QHash<QString, Pick> &byArch = lines[qMakePair(r.verMajor, r.verMinor)];
+            for (const AssetInfo &a : r.assets) {
+                Pick &p = byArch[a.arch];
+                if (r.verPatch > p.patch) {
+                    p.patch = r.verPatch;
+                    p.version = r.version;
+                }
+            }
         }
-        // Pick arm64-capable version; fall back to any-arch version
+
+        // Newest line first; within a line, newest patch first.
         QStringList result;
-        for (auto it = anyBest.keyBegin(); it != anyBest.keyEnd(); ++it) {
-            const QString &major = *it;
-            result.append(arm64Best.value(major, anyBest.value(major)));
+        for (auto line = lines.constEnd(); line != lines.constBegin(); ) {
+            --line;
+            QMap<int, QString> byPatch;   // patch -> version (de-duplicates arches)
+            for (const Pick &p : line.value())
+                byPatch.insert(p.patch, p.version);
+            for (auto v = byPatch.constEnd(); v != byPatch.constBegin(); ) {
+                --v;
+                result.append(v.value());
+            }
         }
-        // Sort by major version number descending (16.x before 14.x before 9.x)
-        std::sort(result.begin(), result.end(), [](const QString &a, const QString &b) {
-            auto majorOf = [](const QString &v) {
-                QString s = v.startsWith(QLatin1Char('v'), Qt::CaseInsensitive) ? v.mid(1) : v;
-                return s.section(QLatin1Char('.'), 0, 0).toInt();
-            };
-            return majorOf(a) > majorOf(b);
-        });
         return result;
     }
 

@@ -8,10 +8,10 @@ EVE Imager downloads EVE OS releases directly from GitHub, lets you configure de
 
 ## Features
 
-- **Live release browser** — paginates all EVE OS releases from [lf-edge/eve GitHub releases](https://github.com/lf-edge/eve/releases), showing one entry per major version sorted highest first (16.x, 14.x, 13.x, …)
-- **LTS filter** — shows only the latest LTS release per major version; prefers the release with arm64 support when available; use the _Use local image file_ tab for non-LTS builds
+- **Live release browser** — paginates all EVE OS releases from [lf-edge/eve GitHub releases](https://github.com/lf-edge/eve/releases), showing the newest patch release of each LTS line, newest line first (17.0.x, 16.0.x, 14.5.x, …)
+- **LTS filter** — shows only releases tagged `X.Y.Z-lts`, and of each LTS line (`X.Y`) only the newest patch; if that newest patch was published without images for an architecture (e.g. arm64) that an older patch of the same line still has, the older patch is listed too; use the _Use local image file_ tab for non-LTS builds
 - **Cascading selection** — choose Version → Architecture → Hypervisor → Platform; only combinations that actually have installer assets are shown
-- **Multi-format support** — handles `.installer.raw`, `.installer.raw.zst` (zstd-compressed), `.installer.img` (gzip-compressed, used by older EVE ≤12.x releases), and `.installer.iso`; all formats are decompressed on the fly; ISO images skip the config customization step
+- **Multi-format support** — handles `.installer.raw`, `.installer.raw.zst` (zstd-compressed), `.installer.img` (gzip-compressed, used by older EVE ≤12.x releases), and `.installer.iso`; compressed formats are decompressed on the fly while writing; when a release offers both `.installer.raw` and `.installer.raw.zst`, the smaller `.raw.zst` download is used (the size of the uncompressed image is then not known up front, so progress is shown as MB written instead of a percentage); ISO images skip the config customization step
 - **Device configuration** — optionally pre-configure the device before writing (RAW images only):
   - Controller URL
   - Network mode: DHCP or static IP (address, gateway, DNS)
@@ -114,7 +114,7 @@ Build with CMake + Qt 6 via the Qt Online Installer. Run as Administrator (raw d
 
 ## Usage
 
-1. **Version** — Select an EVE OS version from the dropdown (loaded live from GitHub, newest first). Only LTS releases are shown (even minor version number — e.g. 12.0.x, 12.2.x). Choose architecture, hypervisor, and platform. Or switch to the _Use local image file_ tab to pick a `.raw` or `.iso` file you already have (useful for non-LTS builds).
+1. **Version** — Select an EVE OS version from the dropdown (loaded live from GitHub, newest first). Only LTS releases are shown (tags ending in `-lts`, e.g. `17.0.1-lts`), one entry per LTS line. Choose architecture, hypervisor, and platform. Or switch to the _Use local image file_ tab to pick a `.raw` or `.iso` file you already have (useful for non-LTS builds).
 
 2. **Storage** — Select the target USB drive. Double-check the device name and size before continuing.
 
