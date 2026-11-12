@@ -49,7 +49,7 @@ BaseDialog {
         text: qsTr("Debug Options")
         font.pointSize: Style.fontSizeLargeHeading
         font.family: Style.fontFamilyBold
-        font.bold: true
+        font.weight: Style.fontWeightSemiBold
         color: Style.formLabelColor
         Layout.fillWidth: true
         horizontalAlignment: Text.AlignHCenter
@@ -98,7 +98,7 @@ BaseDialog {
                 text: qsTr("I/O Options")
                 font.pointSize: Style.fontSizeFormLabel
                 font.family: Style.fontFamilyBold
-                font.bold: true
+                font.weight: Style.fontWeightSemiBold
                 color: Style.textDescriptionColor
                 Layout.fillWidth: true
                 Layout.topMargin: Style.spacingSmall
@@ -171,7 +171,7 @@ BaseDialog {
                     text: Math.round(asyncQueueDepthSlider.value)
                     font.pointSize: Style.fontSizeDescription
                     font.family: Style.fontFamilyBold
-                    font.bold: true
+                    font.weight: Style.fontWeightSemiBold
                     color: Style.formLabelColor
                     Layout.minimumWidth: 40
                     horizontalAlignment: Text.AlignRight
@@ -209,7 +209,7 @@ BaseDialog {
                 text: qsTr("Debugging")
                 font.pointSize: Style.fontSizeFormLabel
                 font.family: Style.fontFamilyBold
-                font.bold: true
+                font.weight: Style.fontWeightSemiBold
                 color: Style.textDescriptionColor
                 Layout.fillWidth: true
             }
@@ -234,7 +234,7 @@ BaseDialog {
                 text: qsTr("Network Options")
                 font.pointSize: Style.fontSizeFormLabel
                 font.family: Style.fontFamilyBold
-                font.bold: true
+                font.weight: Style.fontWeightSemiBold
                 color: Style.textDescriptionColor
                 Layout.fillWidth: true
             }
@@ -259,7 +259,7 @@ BaseDialog {
                 text: qsTr("Workarounds")
                 font.pointSize: Style.fontSizeFormLabel
                 font.family: Style.fontFamilyBold
-                font.bold: true
+                font.weight: Style.fontWeightSemiBold
                 color: Style.textDescriptionColor
                 Layout.fillWidth: true
             }
@@ -296,7 +296,7 @@ BaseDialog {
                 text: qsTr("Advanced Features")
                 font.pointSize: Style.fontSizeFormLabel
                 font.family: Style.fontFamilyBold
-                font.bold: true
+                font.weight: Style.fontWeightSemiBold
                 color: Style.textDescriptionColor
                 Layout.fillWidth: true
             }
@@ -391,7 +391,7 @@ BaseDialog {
                         text: qsTr("Current Status")
                         font.pointSize: Style.fontSizeDescription
                         font.family: Style.fontFamilyBold
-                        font.bold: true
+                        font.weight: Style.fontWeightSemiBold
                         color: Style.textDescriptionColor
                     }
 

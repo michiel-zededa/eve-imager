@@ -18,7 +18,8 @@ WizardStepBase {
     required property ImageWriter imageWriter
     required property var wizardContainer
     
-    title: qsTr("Select your storage device")
+    title: qsTr("Select storage device")
+    subtitle: qsTr("Choose the USB drive to write the installer to.")
     showNextButton: true
     nextButtonEnabled: wizardContainer && wizardContainer.selectedStorageName && wizardContainer.selectedStorageName.length > 0  // Disabled until user selects a storage device
     
@@ -66,6 +67,8 @@ WizardStepBase {
     property bool hasAnyDevices: false
     property bool hasOnlyReadOnlyDevices: false
     property string enumerationErrorMessage: ""
+    // True while the list shows at least one row (selectable or not)
+    property bool hasAnyVisibleRows: false
     
     Component.onCompleted: {
         // Register the ListView for keyboard navigation
@@ -112,49 +115,88 @@ WizardStepBase {
     content: [
     ColumnLayout {
         anchors.fill: parent
-        spacing: 0
-        
+        spacing: Style.spacingSmallPlus
+
         // Error banner for drive enumeration failures
-        Rectangle {
+        ImBanner {
             id: enumerationErrorBanner
             Layout.fillWidth: true
-            Layout.preferredHeight: visible ? errorBannerContent.implicitHeight + Style.spacingMedium * 2 : 0
             visible: root.enumerationErrorMessage.length > 0
-            color: Style.formLabelErrorColor
-            opacity: 0.9
-            
-            RowLayout {
-                id: errorBannerContent
-                anchors.fill: parent
-                anchors.margins: Style.spacingMedium
-                spacing: Style.spacingSmall
-                
-                // Warning icon
-                Text {
-                    text: "⚠"
-                    font.pointSize: Style.fontSizeFormLabel
-                    color: "white"
-                }
-                
-                Text {
-                    Layout.fillWidth: true
-                    text: qsTr("Could not list storage devices: %1").arg(root.enumerationErrorMessage)
-                    font.pointSize: Style.fontSizeDescription
-                    font.family: Style.fontFamily
-                    color: "white"
-                    wrapMode: Text.WordWrap
-                }
-            }
-            
+            kind: "err"
+            text: qsTr("Could not list storage devices: %1").arg(root.enumerationErrorMessage)
             Accessible.role: Accessible.AlertMessage
             Accessible.name: qsTr("Error: Could not list storage devices. %1").arg(root.enumerationErrorMessage)
         }
-        
+
+        // The drive list sits in a card: a header row with the filter, then
+        // one row per drive.
+        ImCard {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            padding: 0
+            spacing: 0
+
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.leftMargin: Style.cardPadding
+                Layout.rightMargin: Style.spacingSmall
+                Layout.preferredHeight: Style.scaled(48)
+                spacing: Style.spacingSmall
+
+                Text {
+                    text: qsTr("Drives")
+                    font.family: Style.fontFamily
+                    font.pointSize: Style.fontSizeCaption
+                    font.weight: Style.fontWeightSemiBold
+                    font.letterSpacing: 1.1
+                    font.capitalization: Font.AllUppercase
+                    color: Style.muted
+                    Accessible.ignored: true
+                }
+
+                Item { Layout.fillWidth: true }
+
+                ImCheckBox {
+                    id: filterSystemDrives
+                    checked: true
+                    text: qsTr("Exclude system drives")
+                    Accessible.description: qsTr("When checked, system drives are hidden from the list. Uncheck to show all drives including system drives.")
+
+                    onToggled: {
+                        if (!checked) {
+                            // If warnings are disabled, bypass the confirmation dialog
+                            if (root.wizardContainer && root.wizardContainer.disableWarnings) {
+                                // Leave checkbox unchecked and continue showing system drives
+                                dstlist.forceActiveFocus()
+                            } else {
+                                // Ask for stern confirmation before disabling filtering
+                                confirmUnfilterPopup.open()
+                            }
+                        }
+                    }
+
+                    // Update storage status whenever checked state changes (from any source)
+                    onCheckedChanged: {
+                        // Defer the update to allow the model to update first
+                        Qt.callLater(root.updateStorageStatus)
+                    }
+                }
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                implicitHeight: 1
+                color: Style.border
+            }
+
         // Storage device list fills available space
         SelectionListView {
             id: dstlist
             Layout.fillWidth: true
             Layout.fillHeight: true
+            Layout.leftMargin: 1
+            Layout.rightMargin: 1
+            Layout.bottomMargin: Style.sectionBorderRadius / 2
             model: root.imageWriter.getDriveList()
             delegate: dstdelegate
             keyboardAutoAdvance: true
@@ -229,11 +271,18 @@ WizardStepBase {
                 root.updateStorageStatus()
             }
             
-            // No storage devices or no valid options message (visually hidden, for screen readers only)
+            // Shown when there is nothing to pick from. Also read by screen readers.
             Label {
                 id: noDevicesLabel
                 anchors.fill: parent
-                visible: !root.hasValidStorageOptions
+                anchors.margins: Style.cardPadding
+                visible: !root.hasValidStorageOptions && !root.hasAnyVisibleRows
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+                wrapMode: Text.WordWrap
+                font.family: Style.fontFamily
+                font.pointSize: Style.fontSizeFormLabel
+                color: Style.muted
                 text: {
                     // Check for enumeration error first
                     if (root.enumerationErrorMessage.length > 0) {
@@ -242,16 +291,14 @@ WizardStepBase {
                         return qsTr("No storage devices found")
                     } else if (root.hasOnlyReadOnlyDevices) {
                         if (filterSystemDrives.checked) {
-                            return qsTr("All visible devices are read-only.\nTry connecting a new device, or uncheck\n'Exclude system drives' below.")
+                            return qsTr("All visible devices are read-only.\nTry connecting a new device, or uncheck\n'Exclude system drives' above.")
                         } else {
                             return qsTr("All devices are read-only.\nPlease connect a writable storage device.")
                         }
                     } else {
-                        return qsTr("All devices are hidden by the filter.\nUncheck 'Exclude system drives' below\nto show system drives.")
+                        return qsTr("All devices are hidden by the filter.\nUncheck 'Exclude system drives' above\nto show system drives.")
                     }
                 }
-                // Make it invisible but still accessible to screen readers
-                opacity: 0
                 Accessible.role: Accessible.StatusBar
                 Accessible.name: text
                 Accessible.ignored: false
@@ -280,43 +327,20 @@ WizardStepBase {
                 }
             }
         }
-        
-        // Filter controls
-        RowLayout {
+        } // ImCard
+
+        // What the image needs, so the size limits in the list make sense
+        Text {
             Layout.fillWidth: true
-            
-            Item {
-                Layout.fillWidth: true
-            }
-            
-            ImCheckBox {
-                id: filterSystemDrives
-                checked: true
-                text: qsTr("Exclude system drives")
-                Accessible.description: qsTr("When checked, system drives are hidden from the list. Uncheck to show all drives including system drives.")
-
-                onToggled: {
-                    if (!checked) {
-                        // If warnings are disabled, bypass the confirmation dialog
-                        if (root.wizardContainer && root.wizardContainer.disableWarnings) {
-                            // Leave checkbox unchecked and continue showing system drives
-                            dstlist.forceActiveFocus()
-                        } else {
-                            // Ask for stern confirmation before disabling filtering
-                            confirmUnfilterPopup.open()
-                        }
-                    }
-                }
-                
-                // Update storage status whenever checked state changes (from any source)
-                onCheckedChanged: {
-                    // Defer the update to allow the model to update first
-                    Qt.callLater(root.updateStorageStatus)
-                }
-            }
+            visible: root.wizardContainer && root.wizardContainer.eveImageSize > 0
+            text: visible ? qsTr("The selected image takes %1 on the drive. Everything on the drive you choose will be erased.")
+                            .arg(root.imageWriter.formatSize(root.wizardContainer.eveImageSize))
+                          : ""
+            font.family: Style.fontFamily
+            font.pointSize: Style.fontSizeDescription
+            color: Style.muted
+            wrapMode: Text.WordWrap
         }
-        
-
     }
     ]
     
@@ -360,21 +384,31 @@ WizardStepBase {
             }
             
             width: dstlist.width
-            height: shouldHide ? 0 : Style.scaled(80)
+            height: shouldHide ? 0 : Style.scaled(68)
             visible: !shouldHide
-            
+
+            readonly property bool isCurrent: dstlist.currentIndex === dstitem.index
+            // Chosen for writing (not just the keyboard cursor)
+            readonly property bool isChosen: isCurrent && root.wizardContainer
+                                             && root.wizardContainer.selectedStorageName.length > 0
+                                             && root.selectedDeviceName === (dstitem.description || dstitem.device)
+
             Rectangle {
                 id: dstbgrect
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.top: parent.top
-                anchors.bottom: parent.bottom
-                color: (dstlist.currentIndex === dstitem.index) ? Style.listViewHighlightColor :
-                       (dstMouseArea.containsMouse && !dstitem.unselectable ? Style.listViewHoverRowBackgroundColor : Style.listViewRowBackgroundColor)
-                radius: 0
-                opacity: dstitem.unselectable ? 0.5 : 1.0
+                anchors.fill: parent
+                color: dstitem.isCurrent ? Style.listViewHighlightColor :
+                       (dstMouseArea.containsMouse && !dstitem.unselectable ? Style.listViewHoverRowBackgroundColor : "transparent")
                 anchors.rightMargin: (dstlist.contentHeight > dstlist.height ? Style.scrollBarWidth : 0)
                 Accessible.ignored: true
+
+                // Divider between rows
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    height: 1
+                    color: Style.border
+                }
                 
                 MouseArea {
                     id: dstMouseArea
@@ -400,36 +434,25 @@ WizardStepBase {
                 
                 RowLayout {
                     anchors.fill: parent
-                    anchors.margins: Style.listItemPadding
-                    spacing: Style.spacingMedium
+                    anchors.leftMargin: Style.cardPadding
+                    anchors.rightMargin: Style.cardPadding
+                    spacing: Style.spacingSmallPlus
                     
-                    // Storage icon
-                    Image {
-                        id: storageIcon
-                        source: dstitem.isRpiboot ? "../icons/ic_rpiboot_40px.svg" :
-                                dstitem.isFastbootStorage ? (
-                                    dstitem.fastbootStorageType === "nvme" ? "../icons/ic_storage_40px.svg" :
-                                    "../icons/ic_sd_storage_40px.svg"
-                                ) :
-                                dstitem.isUsb ? "../icons/ic_usb_40px.svg" :
-                                dstitem.isScsi ? "../icons/ic_storage_40px.svg" :
-                                "../icons/ic_sd_storage_40px.svg"
-                        Layout.preferredWidth: 40
-                        Layout.preferredHeight: 40
-                        fillMode: Image.PreserveAspectFit
-                        smooth: true
-                        mipmap: true
-                        // Rasterize vector sources at device pixel ratio to avoid aliasing/blurriness on HiDPI
-                        sourceSize: Qt.size(Math.round(40 * Screen.devicePixelRatio), Math.round(40 * Screen.devicePixelRatio))
-                        visible: source.toString().length > 0
+                    // Storage icon in a rounded tile
+                    Rectangle {
+                        Layout.preferredWidth: Style.scaled(38)
+                        Layout.preferredHeight: Style.scaled(38)
+                        radius: Style.controlBorderRadius
+                        color: dstitem.isCurrent ? Style.surface : Style.surface2
 
-                        Rectangle {
-                            anchors.fill: parent
-                            color: "transparent"
-                            border.color: Style.titleSeparatorColor
-                            border.width: 1
-                            radius: 0
-                            visible: parent.status === Image.Error
+                        ImIcon {
+                            anchors.centerIn: parent
+                            size: Style.scaled(20)
+                            color: dstitem.isCurrent ? Style.accentText : Style.muted
+                            name: dstitem.isFastbootStorage ? (dstitem.fastbootStorageType === "nvme" ? "drive" : "sd-card")
+                                : dstitem.isUsb || dstitem.isRpiboot ? "usb"
+                                : dstitem.isScsi ? "drive"
+                                : "sd-card"
                         }
                     }
                     
@@ -440,41 +463,36 @@ WizardStepBase {
                         MarqueeText {
                             text: dstitem.description
                             font.pointSize: Style.fontSizeFormLabel
-                            font.family: Style.fontFamilyBold
-                            font.bold: true
-                            color: dstitem.unselectable ? Style.formLabelDisabledColor : Style.formLabelColor
-                            Layout.fillWidth: true
-                            Accessible.ignored: true
-                        }
-                        
-                        Text {
-                            text: dstitem.isRpiboot ? qsTr("Ready for USB boot") : imageWriter.formatSize(parseFloat(dstitem.size))
-                            font.pointSize: Style.fontSizeDescription
                             font.family: Style.fontFamily
-                            color: dstitem.unselectable ? Style.formLabelDisabledColor : Style.textDescriptionColor
+                            font.weight: Style.fontWeightMedium
+                            color: dstitem.unselectable ? Style.muted : Style.text
                             Layout.fillWidth: true
                             Accessible.ignored: true
                         }
                         
                         MarqueeText {
-                            text: dstitem.mountpoints.length > 0 ? 
-                                  qsTr("Mounted as %1").arg(dstitem.mountpoints.join(", ")) : ""
-                            font.pointSize: Style.fontSizeSmall
+                            text: {
+                                var t = dstitem.isRpiboot ? qsTr("Ready for USB boot")
+                                                          : imageWriter.formatSize(parseFloat(dstitem.size))
+                                if (dstitem.mountpoints.length > 0)
+                                    t += " · " + qsTr("Mounted as %1").arg(dstitem.mountpoints.join(", "))
+                                return t
+                            }
+                            font.pointSize: Style.fontSizeDescription
                             font.family: Style.fontFamily
-                            color: dstitem.unselectable ? Style.formLabelDisabledColor : Style.textMetadataColor
+                            color: Style.muted
                             Layout.fillWidth: true
-                            visible: dstitem.mountpoints.length > 0
                             Accessible.ignored: true
                         }
                     }
                     
-                    // Read-only / too-small indicator
-                    Text {
-                        text: dstitem.tooSmall ? root.tooSmallText() : qsTr("Read-only")
-                        font.pointSize: Style.fontSizeDescription
-                        font.family: Style.fontFamily
-                        color: Style.formLabelErrorColor
-                        visible: dstitem.unselectable
+                    // Status: selected / too small / read-only
+                    ImPill {
+                        visible: dstitem.unselectable || dstitem.isChosen
+                        kind: dstitem.tooSmall ? "err" : dstitem.unselectable ? "warn" : "neutral"
+                        text: dstitem.tooSmall ? root.tooSmallText()
+                            : dstitem.unselectable ? qsTr("Read-only")
+                            : qsTr("Selected")
                         Accessible.ignored: true
                     }
                 }
@@ -619,6 +637,19 @@ WizardStepBase {
         var model = root.imageWriter.getDriveList()
         root.hasValidStorageOptions = hasSelectableItems()
         root.hasAnyDevices = model && model.rowCount() > 0
+
+        // Rows that are actually drawn: everything except filtered system drives
+        var anyVisible = false
+        if (root.hasAnyDevices) {
+            for (var r = 0; r < model.rowCount(); r++) {
+                var isSys = model.data(model.index(r, 0), 0x107)
+                if (!(isSys && filterSystemDrives.checked)) {
+                    anyVisible = true
+                    break
+                }
+            }
+        }
+        root.hasAnyVisibleRows = anyVisible
         
         // Check if we only have read-only devices
         if (root.hasAnyDevices && !root.hasValidStorageOptions) {

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- EVE Imager app icon: the Z of the ZEDEDA wordmark on navy, diagonal in teal.
+     Master artwork; the platform files are made from it by generate-app-icons.py -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <rect width="128" height="128" rx="28" fill="#15384a"/>
+  <g transform="translate(34.75 31.6) scale(2.6)">
+    <path d="M22.485 0H0V4.16279H22.485V0Z" fill="#ffffff"/>
+    <path d="M22.5023 20.7539H0V24.9167H22.5023V20.7539Z" fill="#ffffff"/>
+    <path d="M5.89564 20.7539L22.4875 4.16211H16.5721L0 20.7539H5.89564Z" fill="#5fd3cd"/>
+  </g>
+</svg>

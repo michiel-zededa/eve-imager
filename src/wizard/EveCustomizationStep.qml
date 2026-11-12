@@ -21,8 +21,8 @@ WizardStepBase {
     required property ImageWriter imageWriter
     required property var wizardContainer
 
-    title: qsTr("Device configuration (optional)")
-    subtitle: qsTr("Everything on this page is optional — skip it entirely to write a plain EVE OS image. Any values you fill in will be written to the config partition on the USB drive before it is ejected.")
+    title: qsTr("Device configuration")
+    subtitle: qsTr("Optional. Anything you fill in is written to the config partition of the USB drive.")
 
     showBackButton: true
     showNextButton: true
@@ -35,299 +35,235 @@ WizardStepBase {
         root.wizardContainer.eveConfig = c
     }
 
+    // Width of the label column in the form rows
+    readonly property int labelWidth: Style.scaled(130)
+
+    component SectionTitle: Text {
+        font.pointSize: Style.fontSizeHeading
+        font.family: Style.fontFamily
+        font.weight: Style.fontWeightSemiBold
+        color: Style.text
+        Layout.fillWidth: true
+        Accessible.role: Accessible.Heading
+        Accessible.name: text
+    }
+
+    component FormRow: RowLayout {
+        property alias label: rowLabel.text
+        Layout.fillWidth: true
+        spacing: Style.spacingSmall
+        WizardFormLabel {
+            id: rowLabel
+            Layout.preferredWidth: root.labelWidth
+        }
+    }
+
     content: [
         Flickable {
+            id: formFlickable
             anchors.fill: parent
-            contentWidth: parent.width
-            contentHeight: formColumn.implicitHeight + Style.spacingLarge
+            contentWidth: width
+            contentHeight: formColumn.implicitHeight + Style.spacingSmall
             clip: true
-            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+            boundsBehavior: Flickable.StopAtBounds
+            ScrollBar.vertical: ImScrollBar { policy: ScrollBar.AsNeeded }
 
             ColumnLayout {
                 id: formColumn
-                width: parent.width
-                spacing: Style.spacingMedium
-
-                // ── Skip banner ───────────────────────────────────────────────
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.topMargin: Style.spacingSmall
-                    color: Style.zededaLightBlue
-                    radius: Style.sectionBorderRadius
-                    height: skipBannerText.implicitHeight + Style.spacingSmall * 2
-
-                    Text {
-                        id: skipBannerText
-                        anchors {
-                            left: parent.left; right: parent.right
-                            top: parent.top; margins: Style.spacingSmall
-                        }
-                        text: qsTr("All fields below are optional. Click Next to skip and write a plain image.")
-                        font.family: Style.fontFamily
-                        font.pointSize: Style.fontSizeDescription
-                        color: Style.zededaNavy
-                        wrapMode: Text.WordWrap
-                    }
-                }
+                // Leave room for the scroll bar when there is one
+                width: parent.width - (formFlickable.contentHeight > formFlickable.height ? Style.scrollBarWidth + Style.spacingXSmall : 0)
+                spacing: Style.spacingSmallPlus
 
                 // ── Controller ────────────────────────────────────────────────
-                Text {
-                    text: qsTr("Controller")
-                    font.pointSize: Style.fontSizeHeading
-                    font.family: Style.fontFamilyBold
-                    font.bold: true
-                    color: Style.zededaNavy
+                ImCard {
                     Layout.fillWidth: true
-                    Layout.topMargin: Style.spacingSmall
-                }
+                    spacing: Style.spacingSmallPlus
 
-                WizardSectionContainer {
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: Style.formRowSpacing
+                    SectionTitle { text: qsTr("Controller") }
 
-                        RowLayout {
+                    FormRow {
+                        label: qsTr("Controller URL")
+                        ImTextField {
+                            id: controllerUrlField
                             Layout.fillWidth: true
-                            spacing: Style.spacingSmall
-                            WizardFormLabel {
-                                text: qsTr("Controller URL")
-                                Layout.preferredWidth: Style.scaled(140)
-                            }
-                            ImTextField {
-                                id: controllerUrlField
-                                Layout.fillWidth: true
-                                placeholderText: qsTr("e.g. zedcloud.zededa.net  (optional)")
-                                text: root.wizardContainer.eveConfig.controllerUrl
-                                inputMethodHints: Qt.ImhNoPredictiveText | Qt.ImhUrlCharactersOnly
-                                onTextChanged: root.setCfg("controllerUrl", text)
-                            }
+                            placeholderText: qsTr("e.g. zedcloud.zededa.net")
+                            text: root.wizardContainer.eveConfig.controllerUrl
+                            inputMethodHints: Qt.ImhNoPredictiveText | Qt.ImhUrlCharactersOnly
+                            Accessible.name: qsTr("Controller URL")
+                            onTextChanged: root.setCfg("controllerUrl", text)
                         }
-
                     }
                 }
 
                 // ── Networking ────────────────────────────────────────────────
-                Text {
-                    text: qsTr("Networking")
-                    font.pointSize: Style.fontSizeHeading
-                    font.family: Style.fontFamilyBold
-                    font.bold: true
-                    color: Style.zededaNavy
+                ImCard {
                     Layout.fillWidth: true
-                    Layout.topMargin: Style.spacingSmall
-                }
+                    spacing: Style.spacingSmallPlus
 
-                WizardSectionContainer {
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: Style.formRowSpacing
+                    SectionTitle { text: qsTr("Networking") }
 
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: Style.spacingLarge
+                    FormRow {
+                        label: qsTr("Address")
 
-                            RadioButton {
-                                id: dhcpRadio
-                                text: qsTr("DHCP (automatic)")
-                                checked: root.wizardContainer.eveConfig.networkMode === "dhcp"
-                                font.family: Style.fontFamily
-                                font.pointSize: Style.fontSizeFormLabel
-                                onCheckedChanged: {
-                                    if (checked) root.setCfg("networkMode", "dhcp")
-                                }
-                            }
-
-                            RadioButton {
-                                id: staticRadio
-                                text: qsTr("Static IP")
-                                checked: root.wizardContainer.eveConfig.networkMode === "static"
-                                font.family: Style.fontFamily
-                                font.pointSize: Style.fontSizeFormLabel
-                                onCheckedChanged: {
-                                    if (checked) root.setCfg("networkMode", "static")
-                                }
-                            }
+                        ImRadioButton {
+                            id: dhcpRadio
+                            text: qsTr("DHCP (automatic)")
+                            checked: root.wizardContainer.eveConfig.networkMode !== "static"
+                            onToggled: if (checked) root.setCfg("networkMode", "dhcp")
                         }
 
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: Style.formRowSpacing
-                            visible: staticRadio.checked
-
-                            RowLayout {
-                                Layout.fillWidth: true
-                                spacing: Style.spacingSmall
-                                WizardFormLabel { text: qsTr("IP address"); Layout.preferredWidth: Style.scaled(140) }
-                                ImTextField {
-                                    Layout.fillWidth: true
-                                    placeholderText: qsTr("e.g. 192.168.1.100/24")
-                                    text: root.wizardContainer.eveConfig.staticIp
-                                    onTextChanged: root.setCfg("staticIp", text)
-                                }
-                            }
-
-                            RowLayout {
-                                Layout.fillWidth: true
-                                spacing: Style.spacingSmall
-                                WizardFormLabel { text: qsTr("Gateway"); Layout.preferredWidth: Style.scaled(140) }
-                                ImTextField {
-                                    Layout.fillWidth: true
-                                    placeholderText: qsTr("e.g. 192.168.1.1")
-                                    text: root.wizardContainer.eveConfig.gateway
-                                    onTextChanged: root.setCfg("gateway", text)
-                                }
-                            }
-
-                            RowLayout {
-                                Layout.fillWidth: true
-                                spacing: Style.spacingSmall
-                                WizardFormLabel { text: qsTr("DNS server"); Layout.preferredWidth: Style.scaled(140) }
-                                ImTextField {
-                                    Layout.fillWidth: true
-                                    placeholderText: qsTr("e.g. 8.8.8.8")
-                                    text: root.wizardContainer.eveConfig.dns
-                                    onTextChanged: root.setCfg("dns", text)
-                                }
-                            }
+                        ImRadioButton {
+                            id: staticRadio
+                            text: qsTr("Static IP")
+                            checked: root.wizardContainer.eveConfig.networkMode === "static"
+                            onToggled: if (checked) root.setCfg("networkMode", "static")
                         }
 
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: Style.spacingSmall
-                            WizardFormLabel { text: qsTr("HTTP proxy"); Layout.preferredWidth: Style.scaled(140) }
-                            ImTextField {
-                                Layout.fillWidth: true
-                                placeholderText: qsTr("http://proxy.example.com:3128  (optional)")
-                                text: root.wizardContainer.eveConfig.proxyUrl
-                                inputMethodHints: Qt.ImhNoPredictiveText | Qt.ImhUrlCharactersOnly
-                                onTextChanged: root.setCfg("proxyUrl", text)
-                            }
-                        }
+                        Item { Layout.fillWidth: true }
+                    }
 
-                        WizardDescriptionText {
-                            text: qsTr("Leave as DHCP if you have no static IP or proxy requirements.")
+                    FormRow {
+                        label: qsTr("IP address")
+                        visible: staticRadio.checked
+                        ImTextField {
                             Layout.fillWidth: true
+                            placeholderText: qsTr("e.g. 192.168.1.100/24")
+                            text: root.wizardContainer.eveConfig.staticIp
+                            Accessible.name: qsTr("IP address")
+                            onTextChanged: root.setCfg("staticIp", text)
+                        }
+                    }
+
+                    FormRow {
+                        label: qsTr("Gateway")
+                        visible: staticRadio.checked
+                        ImTextField {
+                            Layout.fillWidth: true
+                            placeholderText: qsTr("e.g. 192.168.1.1")
+                            text: root.wizardContainer.eveConfig.gateway
+                            Accessible.name: qsTr("Gateway")
+                            onTextChanged: root.setCfg("gateway", text)
+                        }
+                    }
+
+                    FormRow {
+                        label: qsTr("DNS server")
+                        visible: staticRadio.checked
+                        ImTextField {
+                            Layout.fillWidth: true
+                            placeholderText: qsTr("e.g. 8.8.8.8")
+                            text: root.wizardContainer.eveConfig.dns
+                            Accessible.name: qsTr("DNS server")
+                            onTextChanged: root.setCfg("dns", text)
+                        }
+                    }
+
+                    FormRow {
+                        label: qsTr("HTTP proxy")
+                        ImTextField {
+                            Layout.fillWidth: true
+                            placeholderText: qsTr("e.g. http://proxy.example.com:3128")
+                            text: root.wizardContainer.eveConfig.proxyUrl
+                            inputMethodHints: Qt.ImhNoPredictiveText | Qt.ImhUrlCharactersOnly
+                            Accessible.name: qsTr("HTTP proxy")
+                            onTextChanged: root.setCfg("proxyUrl", text)
                         }
                     }
                 }
 
                 // ── WiFi ──────────────────────────────────────────────────────
-                Text {
-                    text: qsTr("WiFi")
-                    font.pointSize: Style.fontSizeHeading
-                    font.family: Style.fontFamilyBold
-                    font.bold: true
-                    color: Style.zededaNavy
+                ImCard {
                     Layout.fillWidth: true
-                    Layout.topMargin: Style.spacingSmall
-                }
+                    spacing: Style.spacingSmallPlus
 
-                WizardSectionContainer {
                     ColumnLayout {
                         Layout.fillWidth: true
-                        spacing: Style.formRowSpacing
-
+                        spacing: Style.spacingXXSmall
+                        SectionTitle { text: qsTr("WiFi") }
                         WizardDescriptionText {
-                            text: qsTr("Configure a WiFi network for EVE to use on first boot. "
-                                       + "Leave blank to use wired Ethernet only.")
+                            text: qsTr("A WiFi network for EVE to use on first boot. Leave blank to use wired Ethernet only.")
                             Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
                         }
+                    }
 
-                        RowLayout {
+                    FormRow {
+                        label: qsTr("SSID")
+                        ImTextField {
                             Layout.fillWidth: true
-                            spacing: Style.spacingSmall
-                            WizardFormLabel { text: qsTr("SSID"); Layout.preferredWidth: Style.scaled(140) }
-                            ImTextField {
-                                Layout.fillWidth: true
-                                placeholderText: qsTr("Network name  (optional)")
-                                text: root.wizardContainer.eveConfig.wifiSsid
-                                inputMethodHints: Qt.ImhNoPredictiveText
-                                onTextChanged: root.setCfg("wifiSsid", text)
-                            }
+                            placeholderText: qsTr("Network name")
+                            text: root.wizardContainer.eveConfig.wifiSsid
+                            inputMethodHints: Qt.ImhNoPredictiveText
+                            Accessible.name: qsTr("WiFi SSID")
+                            onTextChanged: root.setCfg("wifiSsid", text)
                         }
+                    }
 
-                        RowLayout {
+                    FormRow {
+                        label: qsTr("Password")
+                        ImTextField {
                             Layout.fillWidth: true
-                            spacing: Style.spacingSmall
-                            WizardFormLabel { text: qsTr("Password"); Layout.preferredWidth: Style.scaled(140) }
-                            ImTextField {
-                                Layout.fillWidth: true
-                                placeholderText: qsTr("WPA2 passphrase  (optional)")
-                                text: root.wizardContainer.eveConfig.wifiPassword
-                                echoMode: TextInput.Password
-                                inputMethodHints: Qt.ImhNoPredictiveText | Qt.ImhSensitiveData
-                                onTextChanged: root.setCfg("wifiPassword", text)
-                            }
+                            placeholderText: qsTr("WPA2 passphrase")
+                            text: root.wizardContainer.eveConfig.wifiPassword
+                            echoMode: TextInput.Password
+                            inputMethodHints: Qt.ImhNoPredictiveText | Qt.ImhSensitiveData
+                            Accessible.name: qsTr("WiFi password")
+                            onTextChanged: root.setCfg("wifiPassword", text)
                         }
                     }
                 }
 
                 // ── Installation ──────────────────────────────────────────────
-                Text {
-                    text: qsTr("Installation")
-                    font.pointSize: Style.fontSizeHeading
-                    font.family: Style.fontFamilyBold
-                    font.bold: true
-                    color: Style.zededaNavy
+                ImCard {
                     Layout.fillWidth: true
-                    Layout.topMargin: Style.spacingSmall
-                }
+                    spacing: Style.spacingSmallPlus
 
-                WizardSectionContainer {
                     ColumnLayout {
                         Layout.fillWidth: true
-                        spacing: Style.formRowSpacing
-
+                        spacing: Style.spacingXXSmall
+                        SectionTitle { text: qsTr("Installation") }
                         WizardDescriptionText {
-                            text: qsTr("Control which disks EVE installs onto. Leave blank to use the installer's defaults. "
-                                       + "Use Linux disk names without /dev/ prefix (e.g. nvme0n1, sda).")
+                            text: qsTr("Which disks EVE installs onto. Leave blank to use the installer's defaults. "
+                                       + "Use Linux disk names without the /dev/ prefix (e.g. nvme0n1, sda).")
                             Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
                         }
+                    }
 
-                        RowLayout {
+                    FormRow {
+                        label: qsTr("EVE install disk")
+                        ImTextField {
                             Layout.fillWidth: true
-                            spacing: Style.spacingSmall
-                            WizardFormLabel {
-                                text: qsTr("EVE install disk")
-                                Layout.preferredWidth: Style.scaled(140)
-                            }
-                            ImTextField {
-                                Layout.fillWidth: true
-                                placeholderText: qsTr("e.g. nvme0n1  (optional, auto-detected if blank)")
-                                text: root.wizardContainer.eveConfig.installDisk
-                                inputMethodHints: Qt.ImhNoPredictiveText
-                                onTextChanged: root.setCfg("installDisk", text)
-                            }
+                            placeholderText: qsTr("e.g. nvme0n1 (auto-detected if blank)")
+                            text: root.wizardContainer.eveConfig.installDisk
+                            inputMethodHints: Qt.ImhNoPredictiveText
+                            Accessible.name: qsTr("EVE install disk")
+                            onTextChanged: root.setCfg("installDisk", text)
                         }
+                    }
 
-                        RowLayout {
+                    FormRow {
+                        label: qsTr("/persist disk")
+                        ImTextField {
                             Layout.fillWidth: true
-                            spacing: Style.spacingSmall
-                            WizardFormLabel {
-                                text: qsTr("/persist disk")
-                                Layout.preferredWidth: Style.scaled(140)
-                            }
-                            ImTextField {
-                                Layout.fillWidth: true
-                                placeholderText: qsTr("e.g. sda  (optional, same disk as EVE if blank)")
-                                text: root.wizardContainer.eveConfig.persistDisk
-                                inputMethodHints: Qt.ImhNoPredictiveText
-                                onTextChanged: root.setCfg("persistDisk", text)
-                            }
+                            placeholderText: qsTr("e.g. sda (same disk as EVE if blank)")
+                            text: root.wizardContainer.eveConfig.persistDisk
+                            inputMethodHints: Qt.ImhNoPredictiveText
+                            Accessible.name: qsTr("/persist disk")
+                            onTextChanged: root.setCfg("persistDisk", text)
                         }
+                    }
 
-                        CheckBox {
-                            id: rebootCheckbox
-                            text: qsTr("Reboot automatically after installation completes")
-                            checked: root.wizardContainer.eveConfig.rebootAfterInstall
-                            font.family: Style.fontFamily
-                            font.pointSize: Style.fontSizeFormLabel
-                            onCheckedChanged: root.setCfg("rebootAfterInstall", checked)
-                        }
+                    ImCheckBox {
+                        id: rebootCheckbox
+                        Layout.fillWidth: true
+                        text: qsTr("Reboot automatically after installation completes")
+                        checked: root.wizardContainer.eveConfig.rebootAfterInstall
+                        onToggled: root.setCfg("rebootAfterInstall", checked)
                     }
                 }
 
-                Item { height: Style.spacingLarge }
+                Item { implicitHeight: Style.spacingXSmall }
             }
         }
     ] // content:

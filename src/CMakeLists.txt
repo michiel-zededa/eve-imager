@@ -480,6 +480,14 @@ if(NOT BUILD_CLI_ONLY)
         qmlcomponents/ImCheckBox.qml
         qmlcomponents/ImCloseButton.qml
         qmlcomponents/ImComboBox.qml
+        qmlcomponents/ImIcon.qml
+        qmlcomponents/ImIconButton.qml
+        qmlcomponents/ImTabButton.qml
+        qmlcomponents/ImCard.qml
+        qmlcomponents/ImPill.qml
+        qmlcomponents/ImBanner.qml
+        qmlcomponents/ImScrollBar.qml
+        qmlcomponents/ImProgressBar.qml
         qmlcomponents/ImFileDialog.qml
         qmlcomponents/ImSaveFileDialog.qml
         qmlcomponents/ImPopup.qml

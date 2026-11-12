@@ -313,7 +313,7 @@ WizardStepBase {
             text: qsTr("Invalid Token")
             font.pointSize: Style.fontSizeHeading
             font.family: Style.fontFamilyBold
-            font.bold: true
+            font.weight: Style.fontWeightSemiBold
             color: Style.formLabelErrorColor
             wrapMode: Text.WordWrap
             Layout.fillWidth: true

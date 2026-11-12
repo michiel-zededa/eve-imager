@@ -73,7 +73,7 @@ ListView {
     preferredHighlightEnd: height
     
     // Standard ScrollBar
-    ScrollBar.vertical: ScrollBar {
+    ScrollBar.vertical: ImScrollBar {
         width: Style.scrollBarWidth
         policy: root.contentHeight > root.height ? ScrollBar.AlwaysOn : ScrollBar.AsNeeded
     }

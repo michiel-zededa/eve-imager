@@ -29,7 +29,7 @@ Item {
     readonly property font labelFont: Qt.font({
         family: Style.fontFamilyBold,
         pointSize: Style.fontSizeFormLabel,
-        bold: true
+        weight: Style.fontWeightMedium
     })
     
     // Export the natural/desired width for dialog sizing calculations

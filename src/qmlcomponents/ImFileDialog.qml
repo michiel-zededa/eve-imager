@@ -301,7 +301,7 @@ BaseDialog {
             text: dialog.dialogTitle
             font.pointSize: Style.fontSizeHeading
             font.family: Style.fontFamilyBold
-            font.bold: true
+            font.weight: Style.fontWeightSemiBold
             color: Style.formLabelColor
         }
         
@@ -538,7 +538,7 @@ BaseDialog {
                             dialog.currentFolder = fileUrl
                         }
                     }
-                    ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded; width: Style.scrollBarWidth }
+                    ScrollBar.vertical: ImScrollBar { policy: ScrollBar.AsNeeded; width: Style.scrollBarWidth }
                     Keys.onUpPressed: {
                         if (currentIndex > 0) {
                             currentIndex--
@@ -582,7 +582,7 @@ BaseDialog {
                 id: fileListScrollView
                 anchors.fill: parent
                 activeFocusOnTab: false  // Don't focus the ScrollView itself, only its children
-                ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded; width: Style.scrollBarWidth }
+                ScrollBar.vertical: ImScrollBar { policy: ScrollBar.AsNeeded; width: Style.scrollBarWidth }
                 
                 property int currentFileIndex: -1
                 

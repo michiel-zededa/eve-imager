@@ -70,7 +70,7 @@ WizardStepBase {
                         // Section title
                         Label {
                             text: qsTr("Interfaces")
-                            font.bold: true
+                            font.weight: Style.fontWeightSemiBold
                             font.pointSize: Style.fontSizeTitle
                             Layout.alignment: Qt.AlignLeft
                         }
@@ -111,7 +111,7 @@ WizardStepBase {
                             WizardFormLabel {
                                 id: labelSerial
                                 text: qsTr("Enable Serial:")
-                                font.bold: true
+                                font.weight: Style.fontWeightSemiBold
                                 Layout.fillWidth: true
                                 accessibleDescription: qsTr("Configure the serial interface: Disabled, Default (system decides), Console & Hardware (both console and UART), Hardware (UART only), or Console (console only on supported devices).")
                             }
@@ -146,7 +146,7 @@ WizardStepBase {
                         // Section title
                         Label {
                             text: qsTr("Features")
-                            font.bold: true
+                            font.weight: Style.fontWeightSemiBold
                             font.pointSize: Style.fontSizeTitle
                             Layout.alignment: Qt.AlignLeft
                         }
@@ -353,7 +353,7 @@ WizardStepBase {
             text: qsTr("USB Gadget Mode can change how your device behaves and may impact connectivity and host interaction.")
             font.pointSize: Style.fontSizeHeading
             font.family: Style.fontFamilyBold
-            font.bold: true
+            font.weight: Style.fontWeightSemiBold
             color: Style.formLabelErrorColor
             wrapMode: Text.WordWrap
             Layout.fillWidth: true

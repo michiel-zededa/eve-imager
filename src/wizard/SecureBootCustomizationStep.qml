@@ -180,7 +180,7 @@ WizardStepBase {
                         text: qsTr("OTP Secure Boot Provisioning")
                         font.family: Style.fontFamily
                         font.pointSize: Style.fontSizeSubtitle
-                        font.bold: true
+                        font.weight: Style.fontWeightSemiBold
                         color: Style.textTitleColor
                     }
 

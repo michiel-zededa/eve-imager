@@ -60,7 +60,7 @@ BaseDialog {
                 wrapMode: Text.WordWrap
                 font.family: Style.fontFamily
                 font.pointSize: Style.fontSizeDescription
-                font.bold: true
+                font.weight: Style.fontWeightSemiBold
                 color: "#C62828"
                 text: qsTr("WARNING: OTP Programming is PERMANENT and IRREVERSIBLE")
                 Accessible.role: Accessible.StaticText
@@ -109,7 +109,7 @@ BaseDialog {
             text: qsTr("Key fingerprint: %1").arg(root.keyFingerprint)
             font.family: Style.fontFamily
             font.pointSize: Style.fontSizeSm
-            font.bold: true
+            font.weight: Style.fontWeightSemiBold
             color: Style.textDescriptionColor
             Accessible.role: Accessible.StaticText
             Accessible.name: text
@@ -144,7 +144,7 @@ BaseDialog {
     Text {
         font.family: Style.fontFamily
         font.pointSize: Style.fontSizeSm
-        font.bold: true
+        font.weight: Style.fontWeightSemiBold
         color: Style.textDescriptionColor
         text: root.deviceSerial
         Accessible.role: Accessible.StaticText

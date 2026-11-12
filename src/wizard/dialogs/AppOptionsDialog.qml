@@ -58,10 +58,10 @@ BaseDialog {
     // Header
     Text {
         id: headerText
-        text: qsTr("App Options")
+        text: qsTr("App options")
         font.pointSize: Style.fontSizeLargeHeading
         font.family: Style.fontFamilyBold
-        font.bold: true
+        font.weight: Style.fontWeightSemiBold
         color: Style.formLabelColor
         Layout.fillWidth: true
         horizontalAlignment: Text.AlignHCenter
@@ -156,7 +156,7 @@ BaseDialog {
         // Ensure minimum width accommodates buttons
         Layout.minimumWidth: cancelButton.implicitWidth + saveButton.implicitWidth + Style.spacingMedium * 2 + Style.cardPadding
         Layout.preferredHeight: buttonRow.implicitHeight + Style.cardPadding
-        color: Style.titleBackgroundColor
+        color: "transparent"
 
         RowLayout {
             id: buttonRow
@@ -274,7 +274,7 @@ BaseDialog {
             text: qsTr("Disable warnings?")
             font.pointSize: Style.fontSizeHeading
             font.family: Style.fontFamilyBold
-            font.bold: true
+            font.weight: Style.fontWeightSemiBold
             color: Style.formLabelColor
             Layout.fillWidth: true
             Accessible.role: Accessible.Heading

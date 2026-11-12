@@ -55,6 +55,39 @@ ComboBox {
     // Configuration
     selectTextByMouse: true
     editable: false
+
+    // Closed state: a plain field with a thin border and a chevron, as in the
+    // ZEDEDA product UI (replaces the Material outlined look)
+    implicitHeight: Style.scaled(40)
+    topInset: 0
+    bottomInset: 0
+    leftPadding: Style.spacingSmallPlus
+    rightPadding: Style.scaled(34)
+
+    background: Rectangle {
+        radius: (root.imageWriter && root.imageWriter.isEmbeddedMode()) ? Style.buttonBorderRadiusEmbedded : Style.controlBorderRadius
+        color: root.enabled ? Style.surface : Style.surface2
+        border.color: root.indicateError ? Style.err
+                      : (root.activeFocus || root.popup.visible) ? Style.accent : Style.border
+        border.width: (root.activeFocus || root.popup.visible) ? 2 : 1
+        antialiasing: true
+    }
+
+    contentItem: Text {
+        text: root.displayText
+        font: root.font
+        color: root.enabled ? Style.text : Style.disabledText
+        verticalAlignment: Text.AlignVCenter
+        elide: Text.ElideRight
+    }
+
+    indicator: ImIcon {
+        x: root.width - width - Style.spacingSmallPlus
+        y: (root.height - height) / 2
+        name: "chevron-down"
+        size: Style.scaled(16)
+        color: root.enabled ? Style.muted : Style.disabledText
+    }
     
     ListModel {
         id: filteredModel
@@ -201,8 +234,8 @@ ComboBox {
         }
         
         background: Rectangle {
-            color: Style.mainBackgroundColor
-            radius: (root.imageWriter && root.imageWriter.isEmbeddedMode()) ? Style.sectionBorderRadiusEmbedded : Style.sectionBorderRadius
+            color: Style.surface
+            radius: (root.imageWriter && root.imageWriter.isEmbeddedMode()) ? Style.sectionBorderRadiusEmbedded : Style.controlBorderRadius
             border.color: Style.popupBorderColor
             border.width: Style.sectionBorderWidth
             antialiasing: true
@@ -289,7 +322,17 @@ ComboBox {
                     text: filterDelegate.displayText
                     font: root.font
                     verticalAlignment: Text.AlignVCenter
-                    color: root.indicateError ? Style.formLabelErrorColor : Style.textDescriptionColor
+                    leftPadding: Style.spacingXSmall
+                    color: root.indicateError ? Style.formLabelErrorColor
+                         : filterDelegate.highlighted ? Style.accentText : Style.text
+                }
+
+                // The list's own highlight marks the current row; this only adds hover
+                background: Rectangle {
+                    anchors.fill: parent
+                    anchors.margins: 2
+                    radius: Style.controlBorderRadius - 2
+                    color: filterDelegate.hovered && !filterDelegate.highlighted ? Style.surface2 : "transparent"
                 }
                 
                 highlighted: dropdownList.currentIndex === filterDelegate.index
@@ -363,16 +406,15 @@ ComboBox {
             // Custom highlight that respects popup border radius
             highlight: Rectangle {
                 color: Style.listViewHighlightColor
-                radius: (root.imageWriter && root.imageWriter.isEmbeddedMode()) ? Style.sectionBorderRadiusEmbedded : Style.sectionBorderRadius
-                border.color: dropdownList.activeFocus ? Style.buttonFocusedBackgroundColor : "transparent"
-                border.width: dropdownList.activeFocus ? 2 : 0
+                radius: (root.imageWriter && root.imageWriter.isEmbeddedMode()) ? Style.sectionBorderRadiusEmbedded : Style.controlBorderRadius - 2
+                border.width: 0
                 antialiasing: true
                 
                 anchors.margins: 2
                 anchors.rightMargin: 2 + (dropdownList.contentHeight > dropdownList.height ? Style.scrollBarWidth : 0)
             }
             
-            ScrollBar.vertical: ScrollBar {
+            ScrollBar.vertical: ImScrollBar {
                 policy: dropdownList.contentHeight > dropdownList.height ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
                 width: Style.scrollBarWidth
             }

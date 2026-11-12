@@ -116,7 +116,7 @@ WizardStepBase {
                     text: qsTr("Unable to load device list")
                     font.pointSize: Style.fontSizeHeading
                     font.family: Style.fontFamilyBold
-                    font.bold: true
+                    font.weight: Style.fontWeightSemiBold
                     color: Style.formLabelColor
                     horizontalAlignment: Text.AlignHCenter
                     Layout.fillWidth: true
@@ -330,7 +330,7 @@ WizardStepBase {
                             text: hwitem.name
                             font.pointSize: Style.fontSizeFormLabel
                             font.family: Style.fontFamilyBold
-                            font.bold: true
+                            font.weight: Style.fontWeightSemiBold
                             color: Style.formLabelColor
                             Layout.fillWidth: true
                             Accessible.ignored: true

@@ -481,7 +481,7 @@ WizardStepBase {
                             text: delegateItem.name
                             font.pointSize: Style.fontSizeFormLabel
                             font.family: Style.fontFamilyBold
-                            font.bold: true
+                            font.weight: Style.fontWeightSemiBold
                             color: Style.formLabelColor
                             Layout.fillWidth: true
                             Accessible.ignored: true

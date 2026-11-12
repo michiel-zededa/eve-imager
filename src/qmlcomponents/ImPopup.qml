@@ -91,7 +91,7 @@ Popup {
             anchors.topMargin: Style.spacingSmall
             font.family: Style.fontFamily
             font.pointSize: Style.fontSizeSm
-            font.bold: true
+            font.weight: Style.fontWeightSemiBold
             Accessible.role: Accessible.Heading
             Accessible.name: text
             Accessible.ignored: false

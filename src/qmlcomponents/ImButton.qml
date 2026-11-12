@@ -12,7 +12,9 @@ Button {
     id: control
     font.family: Style.fontFamily
     font.pointSize: Style.fontSizeSm
-    font.capitalization: Font.AllUppercase
+    font.weight: Style.fontWeightMedium
+    // "danger" tints the label and border red (e.g. Cancel write)
+    property bool danger: false
     
     // Allow instances to provide a custom accessibility description
     property string accessibleDescription: ""
@@ -30,10 +32,14 @@ Button {
     }
 
     background: Rectangle {
-        color: control.enabled ? (control.activeFocus ? Style.buttonFocusedBackgroundColor : (control.hovered ? Style.buttonHoveredBackgroundColor : Style.buttonBackgroundColor)) : Qt.rgba(0, 0, 0, 0.1)
-        radius: (control.imageWriter && control.imageWriter.isEmbeddedMode()) ? Style.buttonBorderRadiusEmbedded : 4
-        border.color: control.enabled ? Style.popupBorderColor : Qt.rgba(0, 0, 0, 0.2)
-        border.width: 1
+        color: !control.enabled ? Style.surface
+               : control.danger && (control.hovered || control.down) ? Style.errBg
+               : (control.hovered || control.down) ? Style.buttonHoveredBackgroundColor : Style.buttonBackgroundColor
+        radius: (control.imageWriter && control.imageWriter.isEmbeddedMode()) ? Style.buttonBorderRadiusEmbedded : Style.controlBorderRadius
+        border.color: control.activeFocus ? Style.focusOutlineColor
+                      : control.danger && control.enabled ? Style.errBorder : Style.popupBorderColor
+        border.width: control.activeFocus ? Style.focusOutlineWidth : 1
+        opacity: control.enabled ? 1.0 : 0.6
         antialiasing: true  // Smooth edges at non-integer scale factors
         clip: true  // Prevent content overflow at non-integer scale factors
     }
@@ -44,7 +50,7 @@ Button {
     contentItem: Text {
         text: control.text
         font: control.font
-        color: control.enabled ? Style.buttonForegroundColor : Qt.rgba(0, 0, 0, 0.3)
+        color: !control.enabled ? Style.disabledText : control.danger ? Style.err : Style.buttonForegroundColor
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
         elide: Text.ElideRight  // Truncate if layout constrains button below content width

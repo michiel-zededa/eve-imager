@@ -21,11 +21,11 @@ WizardStepBase {
     title: qsTr("Write image")
     subtitle: {
         if (root.isWriting) {
-            return qsTr("Writing in progress — do not disconnect the storage device")
+            return qsTr("Writing in progress. Do not disconnect the storage device.")
         } else if (root.isComplete) {
             return qsTr("Write complete")
         } else {
-            return qsTr("Review your choices and write the image to the storage device")
+            return qsTr("Review your choices, then write the image to the storage device.")
         }
     }
     nextButtonText: {
@@ -79,39 +79,91 @@ WizardStepBase {
     property int writeThroughputKBps: 0
     property string operationWarning: ""  // Non-fatal warning message (e.g., sync fallback)
     property bool isIndeterminateProgress: false  // True when we can't determine accurate progress (e.g., gz files >4GB)
-    // For EVE, customizations are always shown when the eveConfig has any non-empty field
-    readonly property bool anyCustomizationsApplied: false
 
     // Disable back while writing (but allow back after failure so user can retry)
     backButtonEnabled: !root.isWriting
+
+    // The red outline is for stopping a write, not for skipping verification
+    nextButtonDanger: root.isWriting && !root.isVerifying
+
+    // Progress shown in the card: percentage (-1 = not known) and a line of detail
+    property real progressPercent: -1
+    readonly property string phaseLabel: root.hasFailed ? qsTr("Failed")
+                                       : root.isCancelling ? qsTr("Cancelling")
+                                       : root.isFinalising ? qsTr("Finishing")
+                                       : root.isVerifying ? qsTr("Verifying")
+                                       : imageWriter.writeState === ImageWriter.Writing ? qsTr("Writing")
+                                       : qsTr("Preparing")
+
+    function showWriteProgress(now, total) {
+        if (!root.isWriting)
+            return
+        if (root.isIndeterminateProgress || total <= 0) {
+            root.progressPercent = -1
+            progressText.text = qsTr("%1 written to the drive").arg(imageWriter.formatSize(now))
+        } else {
+            var progress = (now / total) * 100
+            progressBar.value = progress
+            root.progressPercent = progress
+            progressText.text = qsTr("%1 of %2 written to the drive").arg(imageWriter.formatSize(now)).arg(imageWriter.formatSize(total))
+        }
+    }
+
+    function showVerifyProgress(now, total) {
+        if (!root.isWriting)
+            return
+        root.operationWarning = ""  // Clear write warnings during verification
+        var progress = total > 0 ? (now / total) * 100 : 0
+        progressBar.value = progress
+        root.progressPercent = progress
+        progressText.text = qsTr("%1 of %2 verified").arg(imageWriter.formatSize(now)).arg(imageWriter.formatSize(total))
+    }
+
+    function showFinalizing() {
+        progressText.text = qsTr("Finishing up…")
+        progressBar.value = 100
+        root.progressPercent = 100
+    }
+
+    component CardHeading: Text {
+        font.family: Style.fontFamily
+        font.pointSize: Style.fontSizeCaption
+        font.weight: Style.fontWeightSemiBold
+        font.letterSpacing: 1.1
+        font.capitalization: Font.AllUppercase
+        color: Style.muted
+    }
+
+    component SummaryLabel: Text {
+        font.pointSize: Style.fontSizeFormLabel
+        font.family: Style.fontFamily
+        color: Style.muted
+        Layout.alignment: Qt.AlignTop
+        Accessible.role: Accessible.StaticText
+        Accessible.focusable: root.imageWriter ? root.imageWriter.isScreenReaderActive() : false
+        focusPolicy: (root.imageWriter && root.imageWriter.isScreenReaderActive()) ? Qt.TabFocus : Qt.NoFocus
+        activeFocusOnTab: root.imageWriter ? root.imageWriter.isScreenReaderActive() : false
+    }
 
     // Content
     content: [
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: Style.cardPadding
-        spacing: Style.spacingLarge
+        spacing: Style.spacingSmallPlus
 
-        // Top spacer to vertically center progress section when writing/complete/failed
-        Item { Layout.fillHeight: true; visible: root.isWriting || root.isComplete || root.hasFailed }
-
-        // Summary section (de-chromed)
-        ColumnLayout {
+        // Summary: stays visible while writing, so it is always clear what goes where
+        ImCard {
             id: summaryLayout
             Layout.fillWidth: true
-            Layout.maximumWidth: Style.sectionMaxWidth
-            Layout.alignment: Qt.AlignHCenter
-            spacing: Style.spacingMedium
-            visible: !root.isWriting && !root.isComplete && !root.hasFailed
+            padding: 0
+            spacing: 0
 
-            Text {
+            CardHeading {
                 id: summaryHeading
                 text: qsTr("Summary")
-                font.pointSize: Style.fontSizeHeading
-                font.family: Style.fontFamilyBold
-                font.bold: true
-                color: Style.formLabelColor
-                Layout.fillWidth: true
+                Layout.leftMargin: Style.cardPadding
+                Layout.topMargin: Style.spacingSmallPlus
+                Layout.bottomMargin: Style.spacingSmallPlus
                 Accessible.role: Accessible.Heading
                 Accessible.name: text
                 Accessible.focusable: root.imageWriter ? root.imageWriter.isScreenReaderActive() : false
@@ -119,57 +171,66 @@ WizardStepBase {
                 activeFocusOnTab: root.imageWriter ? root.imageWriter.isScreenReaderActive() : false
             }
 
+            Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Style.border }
+
             GridLayout {
                 id: summaryGrid
                 Layout.fillWidth: true
+                Layout.margins: Style.cardPadding
+                Layout.topMargin: Style.spacingSmallPlus
+                Layout.bottomMargin: Style.spacingSmallPlus
                 columns: 2
                 columnSpacing: Style.formColumnSpacing
-                rowSpacing: Style.spacingSmall
+                rowSpacing: Style.spacingTiny
 
-                Text {
+                SummaryLabel {
                     id: osLabel
-                    text: qsTr("EVE OS image:")
-                    font.pointSize: Style.fontSizeDescription
-                    font.family: Style.fontFamily
-                    color: Style.formLabelColor
-                    Accessible.role: Accessible.StaticText
-                    Accessible.name: text + " " + (wizardContainer.selectedOsName || CommonStrings.noImageSelected)
-                    Accessible.focusable: root.imageWriter ? root.imageWriter.isScreenReaderActive() : false
-                    focusPolicy: (root.imageWriter && root.imageWriter.isScreenReaderActive()) ? Qt.TabFocus : Qt.NoFocus
-                    activeFocusOnTab: root.imageWriter ? root.imageWriter.isScreenReaderActive() : false
+                    text: qsTr("Image")
+                    Layout.preferredWidth: Style.scaled(110)
+                    Accessible.name: text + ": " + (wizardContainer.selectedOsName || CommonStrings.noImageSelected)
                 }
 
                 MarqueeText {
                     id: osValue
                     text: wizardContainer.selectedOsName || CommonStrings.noImageSelected
-                    font.pointSize: Style.fontSizeDescription
-                    font.family: Style.fontFamilyBold
-                    font.bold: true
-                    color: Style.formLabelColor
+                    font.pointSize: Style.fontSizeFormLabel
+                    font.family: Style.fontFamily
+                    color: Style.text
                     Layout.fillWidth: true
                     Accessible.ignored: true  // Read as part of the label
                 }
 
-                Text {
+                SummaryLabel {
                     id: storageLabel
-                    text: CommonStrings.storage
-                    font.pointSize: Style.fontSizeDescription
-                    font.family: Style.fontFamily
-                    color: Style.formLabelColor
-                    Accessible.role: Accessible.StaticText
+                    text: qsTr("Storage")
                     Accessible.name: text + ": " + (wizardContainer.selectedStorageName || CommonStrings.noStorageSelected)
-                    Accessible.focusable: root.imageWriter ? root.imageWriter.isScreenReaderActive() : false
-                    focusPolicy: (root.imageWriter && root.imageWriter.isScreenReaderActive()) ? Qt.TabFocus : Qt.NoFocus
-                    activeFocusOnTab: root.imageWriter ? root.imageWriter.isScreenReaderActive() : false
                 }
 
                 MarqueeText {
                     id: storageValue
                     text: wizardContainer.selectedStorageName || CommonStrings.noStorageSelected
-                    font.pointSize: Style.fontSizeDescription
-                    font.family: Style.fontFamilyBold
-                    font.bold: true
-                    color: Style.formLabelColor
+                    font.pointSize: Style.fontSizeFormLabel
+                    font.family: Style.fontFamily
+                    color: Style.text
+                    Layout.fillWidth: true
+                    Accessible.ignored: true  // Read as part of the label
+                }
+
+                SummaryLabel {
+                    id: configLabel
+                    text: qsTr("Configuration")
+                    Accessible.name: text + ": " + configValue.text
+                }
+
+                Text {
+                    id: configValue
+                    text: root.wizardContainer.eveConfigSummary()
+                    font.pointSize: Style.fontSizeFormLabel
+                    font.family: Style.fontFamily
+                    color: Style.text
+                    wrapMode: Text.WordWrap
+                    maximumLineCount: 3
+                    elide: Text.ElideRight
                     Layout.fillWidth: true
                     Accessible.ignored: true  // Read as part of the label
                 }
@@ -177,243 +238,200 @@ WizardStepBase {
         }
 
         // ISO notice — shown when writing an ISO (no config applied)
-        Rectangle {
+        ImBanner {
             id: isoNotice
             Layout.fillWidth: true
-            Layout.maximumWidth: Style.sectionMaxWidth
-            Layout.alignment: Qt.AlignHCenter
-            color: "#fff3cd"
-            border.color: "#ffc107"
-            border.width: 1
-            radius: Style.sectionBorderRadius
-            height: isoNoticeText.implicitHeight + Style.spacingSmall * 2
+            kind: "warn"
             visible: !root.isWriting && !root.isComplete && !root.hasFailed
                      && root.wizardContainer.eveIsIsoImage
-
-            Text {
-                id: isoNoticeText
-                anchors {
-                    left: parent.left; right: parent.right
-                    top: parent.top; margins: Style.spacingSmall
-                }
-                text: qsTr("⚠ ISO image — controller URL, network, and SSH settings cannot be "
-                            + "pre-configured on ISO installers. The image will boot as a plain "
-                            + "installer. Configure the device through the controller after installation.")
-                font.family: Style.fontFamily
-                font.pointSize: Style.fontSizeDescription
-                color: "#856404"
-                wrapMode: Text.WordWrap
-            }
+            text: qsTr("ISO image: controller URL, network, and SSH settings cannot be "
+                       + "pre-configured on ISO installers. The image will boot as a plain "
+                       + "installer. Configure the device through the controller after installation.")
         }
 
-        // Customization summary (what will be written) - de-chromed
-        ColumnLayout {
-            id: customLayout
+        // What happens next, before the write starts
+        ImBanner {
             Layout.fillWidth: true
-            Layout.maximumWidth: Style.sectionMaxWidth
-            Layout.alignment: Qt.AlignHCenter
-            spacing: Style.spacingMedium
-            visible: !root.isWriting && !root.isComplete && !root.hasFailed && root.anyCustomizationsApplied
-
-            Text {
-                id: customizationsHeading
-                text: qsTr("Customisations to apply:")
-                font.pointSize: Style.fontSizeHeading
-                font.family: Style.fontFamilyBold
-                font.bold: true
-                color: Style.formLabelColor
-                Layout.fillWidth: true
-                Accessible.role: Accessible.Heading
-                Accessible.name: text
-                Accessible.focusable: root.imageWriter ? root.imageWriter.isScreenReaderActive() : false
-                focusPolicy: (root.imageWriter && root.imageWriter.isScreenReaderActive()) ? Qt.TabFocus : Qt.NoFocus
-                activeFocusOnTab: root.imageWriter ? root.imageWriter.isScreenReaderActive() : false
-            }
-
-            ScrollView {
-                id: customizationsScrollView
-                Layout.fillWidth: true
-                // Cap height so long lists become scrollable in default window size
-                Layout.maximumHeight: Math.round(root.height * 0.4)
-                clip: true
-                activeFocusOnTab: true
-                focusPolicy: Qt.TabFocus
-                Accessible.role: Accessible.List
-                Accessible.name: {
-                    // Build a list of visible customizations to announce
-                    var items = []
-                    if (wizardContainer.hostnameConfigured) items.push(CommonStrings.hostnameConfigured)
-                    if (wizardContainer.localeConfigured) items.push(CommonStrings.localeConfigured)
-                    if (wizardContainer.userConfigured) items.push(CommonStrings.userAccountConfigured)
-                    if (wizardContainer.wifiConfigured) items.push(CommonStrings.wifiConfigured)
-                    if (wizardContainer.sshEnabled) items.push(CommonStrings.sshEnabled)
-                    if (wizardContainer.piConnectEnabled) items.push(CommonStrings.piConnectEnabled)
-                    if (wizardContainer.featUsbGadgetEnabled) items.push(CommonStrings.usbGadgetEnabled)
-                    if (wizardContainer.ifI2cEnabled) items.push(CommonStrings.i2cEnabled)
-                    if (wizardContainer.ifSpiEnabled) items.push(CommonStrings.spiEnabled)
-                    if (wizardContainer.if1WireEnabled) items.push(CommonStrings.onewireEnabled)
-                    if (wizardContainer.ifSerial !== "" && wizardContainer.ifSerial !== "Disabled") items.push(CommonStrings.serialConfigured)
-                    
-                    return items.length + " " + (items.length === 1 ? qsTr("customization") : qsTr("customizations")) + ": " + items.join(", ")
-                }
-                contentItem: Flickable {
-                    id: customizationsFlickable
-                    contentWidth: width
-                    contentHeight: customizationsColumn.implicitHeight
-                    interactive: contentHeight > height
-                    clip: true
-                    
-                    Keys.onUpPressed: {
-                        if (contentY > 0) {
-                            contentY = Math.max(0, contentY - 20)
-                        }
-                    }
-                    Keys.onDownPressed: {
-                        var maxY = Math.max(0, contentHeight - height)
-                        if (contentY < maxY) {
-                            contentY = Math.min(maxY, contentY + 20)
-                        }
-                    }
-                    Column {
-                        id: customizationsColumn
-                        width: parent.width
-                        spacing: Style.spacingXSmall
-                        // EVE OS imager: no RPi-specific customizations
-                    }
-                }
-                ScrollBar.vertical: ScrollBar {
-                    policy: ScrollBar.AsNeeded
-                    width: Style.scrollBarWidth
-                }
-            }
+            kind: "neutral"
+            visible: !root.isWriting && !root.isComplete && !root.hasFailed
+            text: qsTr("Writing erases everything on the storage device.")
         }
 
-        // Progress section (de-chromed)
-        ColumnLayout {
+        // Progress card
+        ImCard {
             id: progressLayout
             Layout.fillWidth: true
-            Layout.maximumWidth: Style.sectionMaxWidth
-            Layout.alignment: Qt.AlignHCenter
-            spacing: Style.spacingMedium
-            visible: root.isWriting || root.isComplete || root.hasFailed
+            spacing: Style.spacingSmallPlus
+            visible: root.isWriting || root.isComplete
 
-            Text {
-                id: progressText
-                text: qsTr("Starting write process...")
-                font.pointSize: Style.fontSizeHeading
-                font.family: Style.fontFamilyBold
-                font.bold: true
-                color: Style.formLabelColor
+            RowLayout {
                 Layout.fillWidth: true
-                horizontalAlignment: Text.AlignHCenter
-                Accessible.role: Accessible.StatusBar
-                Accessible.name: text
-                Accessible.focusable: root.imageWriter ? root.imageWriter.isScreenReaderActive() : false
-                focusPolicy: (root.imageWriter && root.imageWriter.isScreenReaderActive()) ? Qt.TabFocus : Qt.NoFocus
-                activeFocusOnTab: root.imageWriter ? root.imageWriter.isScreenReaderActive() : false
+                spacing: Style.spacingMedium
+
+                ColumnLayout {
+                    spacing: Style.spacingXXSmall
+
+                    CardHeading { text: root.phaseLabel }
+
+                    Text {
+                        id: percentText
+                        // No number while the size is unknown or nothing is being counted
+                        visible: root.progressPercent >= 0 && !progressBar.indeterminate
+                        text: qsTr("%1%").arg(Math.round(root.progressPercent))
+                        font.family: Style.fontFamily
+                        font.pointSize: Math.round(Style.fontSizeTitle * 1.35)
+                        font.weight: Style.fontWeightSemiBold
+                        font.letterSpacing: -0.6
+                        color: Style.text
+                        Accessible.ignored: true
+                    }
+                }
+
+                Text {
+                    id: progressText
+                    text: qsTr("Starting write process...")
+                    font.pointSize: Style.fontSizeFormLabel
+                    font.family: Style.fontFamily
+                    font.weight: Style.fontWeightMedium
+                    color: Style.text
+                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignBottom
+                    Layout.bottomMargin: Style.spacingXSmall
+                    horizontalAlignment: Text.AlignRight
+                    wrapMode: Text.WordWrap
+                    Accessible.role: Accessible.StatusBar
+                    Accessible.name: root.phaseLabel + (percentText.visible ? " " + percentText.text : "") + ". " + text
+                    Accessible.focusable: root.imageWriter ? root.imageWriter.isScreenReaderActive() : false
+                    focusPolicy: (root.imageWriter && root.imageWriter.isScreenReaderActive()) ? Qt.TabFocus : Qt.NoFocus
+                    activeFocusOnTab: root.imageWriter ? root.imageWriter.isScreenReaderActive() : false
+                }
             }
 
-            ProgressBar {
+            ImProgressBar {
                 id: progressBar
                 Layout.fillWidth: true
-                Layout.preferredHeight: Style.spacingLarge
                 value: 0
                 from: 0
                 to: 100
-                indeterminate: root.isIndeterminateProgress && !root.isVerifying && !root.isFinalising
-
-                Material.accent: Style.progressBarVerifyForegroundColor
-                Material.background: Style.progressBarBackgroundColor
+                indeterminate: (root.isIndeterminateProgress && !root.isVerifying && !root.isFinalising)
+                               || imageWriter.writeState === ImageWriter.Preparing
+                               || root.isCancelling
+                fillColor: root.isVerifying ? Style.progressBarVerifyForegroundColor : Style.progressBarWritingForegroundColor
                 visible: root.isWriting
                 Accessible.role: Accessible.ProgressBar
                 Accessible.name: qsTr("Write progress")
                 Accessible.description: progressText.text
             }
-            
-            // Bottleneck status indicator - shows what's limiting progress
-            Text {
-                id: bottleneckText
-                text: {
-                    if (root.bottleneckStatus !== "") {
-                        if (root.writeThroughputKBps > 0) {
-                            return root.bottleneckStatus + " (" + Math.round(root.writeThroughputKBps / 1024) + " MB/s)"
-                        }
-                        return root.bottleneckStatus
-                    }
-                    return ""
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Style.spacingTiny
+                visible: root.isWriting
+
+                // The stages of a write; the current one is highlighted
+                ImPill {
+                    text: qsTr("1 Write")
+                    readonly property bool done: root.isVerifying || root.isFinalising
+                    kind: done ? "ok" : (imageWriter.writeState === ImageWriter.Writing || imageWriter.writeState === ImageWriter.Preparing) ? "neutral" : "plain"
+                    iconName: done ? "check" : ""
                 }
-                font.pointSize: Style.fontSizeSmall
-                font.family: Style.fontFamily
-                color: Style.formLabelDisabledColor
-                Layout.fillWidth: true
-                horizontalAlignment: Text.AlignHCenter
-                visible: root.isWriting && root.bottleneckStatus !== ""
+                ImPill {
+                    text: qsTr("2 Verify")
+                    readonly property bool done: root.isFinalising
+                    kind: done ? "ok" : root.isVerifying ? "neutral" : "plain"
+                    iconName: done ? "check" : ""
+                }
+                ImPill {
+                    text: qsTr("3 Finish")
+                    kind: root.isFinalising ? "neutral" : "plain"
+                }
+
+                // Bottleneck status indicator - shows what's limiting progress
+                Text {
+                    id: bottleneckText
+                    text: {
+                        if (root.bottleneckStatus !== "") {
+                            if (root.writeThroughputKBps > 0) {
+                                return root.bottleneckStatus + " (" + Math.round(root.writeThroughputKBps / 1024) + " MB/s)"
+                            }
+                            return root.bottleneckStatus
+                        }
+                        return ""
+                    }
+                    font.pointSize: Style.fontSizeDescription
+                    font.family: Style.fontFamily
+                    color: Style.muted
+                    Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignRight
+                    elide: Text.ElideLeft
+                    visible: root.bottleneckStatus !== ""
+                }
             }
-            
+
             // Operation warning (e.g., sync fallback due to slow device)
-            Text {
+            ImBanner {
                 id: operationWarningText
-                text: "⚠ " + root.operationWarning
-                font.pointSize: Style.fontSizeSmall
-                font.family: Style.fontFamily
-                color: "#FFA500"  // Orange/amber for warning
                 Layout.fillWidth: true
-                horizontalAlignment: Text.AlignHCenter
-                wrapMode: Text.WordWrap
+                kind: "warn"
+                text: root.operationWarning
                 visible: root.isWriting && root.operationWarning !== ""
             }
+        }
 
-            // Error box — shown when write fails so the message isn't lost
-            Rectangle {
-                id: errorBox
-                Layout.fillWidth: true
-                color: "#fdecea"
-                border.color: "#e57373"
-                border.width: 1
-                radius: Style.sectionBorderRadius
-                height: errorColumn.implicitHeight + Style.spacingMedium * 2
-                visible: root.hasFailed && root.errorMessage.length > 0
+        // Error box — shown when write fails so the message isn't lost
+        Rectangle {
+            id: errorBox
+            Layout.fillWidth: true
+            color: Style.errBg
+            border.color: Style.errBorder
+            border.width: 1
+            radius: Style.sectionBorderRadius
+            implicitHeight: errorColumn.implicitHeight + Style.cardPadding * 2
+            visible: root.hasFailed && root.errorMessage.length > 0
 
-                ColumnLayout {
-                    id: errorColumn
-                    anchors {
-                        left: parent.left; right: parent.right
-                        top: parent.top
-                        margins: Style.spacingMedium
-                    }
-                    spacing: Style.spacingSmall
+            ColumnLayout {
+                id: errorColumn
+                anchors {
+                    left: parent.left; right: parent.right
+                    top: parent.top
+                    margins: Style.cardPadding
+                }
+                spacing: Style.spacingTiny
 
+                RowLayout {
+                    spacing: Style.spacingTiny
+                    ImIcon { name: "x-circle"; color: Style.err; size: Style.scaled(18) }
                     Text {
                         text: qsTr("Write failed")
                         font.pointSize: Style.fontSizeFormLabel
-                        font.family: Style.fontFamilyBold
-                        font.bold: true
-                        color: "#c62828"
-                        Layout.fillWidth: true
-                    }
-                    Text {
-                        text: root.errorMessage
-                        font.pointSize: Style.fontSizeDescription
                         font.family: Style.fontFamily
-                        color: Style.formLabelColor
+                        font.weight: Style.fontWeightSemiBold
+                        color: Style.err
                         Layout.fillWidth: true
-                        wrapMode: Text.WordWrap
-                        textFormat: Text.StyledText
                     }
-                    Text {
-                        text: qsTr("Press ← Back to return and try again.")
-                        font.pointSize: Style.fontSizeDescription
-                        font.family: Style.fontFamily
-                        color: Style.textDescriptionColor
-                        Layout.fillWidth: true
-                        wrapMode: Text.WordWrap
-                    }
+                }
+                Text {
+                    text: root.errorMessage
+                    font.pointSize: Style.fontSizeDescription
+                    font.family: Style.fontFamily
+                    color: Style.text
+                    linkColor: Style.accentText
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    textFormat: Text.StyledText
+                }
+                Text {
+                    text: qsTr("Press Back to return and try again.")
+                    font.pointSize: Style.fontSizeDescription
+                    font.family: Style.fontFamily
+                    color: Style.muted
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
                 }
             }
         }
 
-        // Bottom spacer to vertically center progress section when writing/complete/failed
-        Item { Layout.fillHeight: true; visible: root.isWriting || root.isComplete || root.hasFailed }
+        Item { Layout.fillHeight: true }
     }
     ]
 
@@ -425,8 +443,7 @@ WizardStepBase {
                 imageWriter.skipCurrentVerification()
             } else {
                 // Cancel the actual write operation
-                progressBar.value = 100
-                progressText.text = qsTr("Finalising…")
+                progressText.text = qsTr("Stopping the write…")
                 imageWriter.cancelWrite()
             }
         } else if (!root.isComplete) {
@@ -444,8 +461,7 @@ WizardStepBase {
     }
 
     function onFinalizing() {
-        progressText.text = qsTr("Finalising...")
-        progressBar.value = 100
+        root.showFinalizing()
     }
 
     // Confirmation dialog
@@ -506,7 +522,7 @@ WizardStepBase {
             text: qsTr("You are about to ERASE all data on: %1").arg(wizardContainer.selectedStorageName || qsTr("the storage device"))
             font.pointSize: Style.fontSizeHeading
             font.family: Style.fontFamilyBold
-            font.bold: true
+            font.weight: Style.fontWeightSemiBold
             color: Style.formLabelErrorColor
             wrapMode: Text.WordWrap
             Layout.fillWidth: true
@@ -574,9 +590,6 @@ WizardStepBase {
                 }
             }
         }
-
-        // Bottom spacer to balance the dialog's internal top padding
-        Item { Layout.preferredHeight: Style.cardPadding }
     }
 
     // Delay accept for 2 seconds - moved outside dialog content
@@ -614,6 +627,7 @@ WizardStepBase {
             root.isIndeterminateProgress = !imageWriter.isExtractSizeKnown()
             progressText.text = qsTr("Starting write process...")
             progressBar.value = 0
+            root.progressPercent = -1
             imageWriter.startWrite()
         }
     }
@@ -624,26 +638,11 @@ WizardStepBase {
     }
 
     function onWriteProgress(now, total) {
-        if (root.isWriting) {
-            if (root.isIndeterminateProgress) {
-                // Show indeterminate progress with bytes written (in human-readable format)
-                var bytesWrittenMB = Math.round(now / (1024 * 1024))
-                progressText.text = qsTr("Writing... %1 MB written").arg(bytesWrittenMB)
-            } else {
-                var progress = total > 0 ? (now / total) * 100 : 0
-                progressBar.value = progress
-                progressText.text = qsTr("Writing... %1%").arg(Math.round(progress))
-            }
-        }
+        root.showWriteProgress(now, total)
     }
 
     function onVerifyProgress(now, total) {
-        if (root.isWriting) {
-            root.operationWarning = ""  // Clear write warnings during verification
-            var progress = total > 0 ? (now / total) * 100 : 0
-            progressBar.value = progress
-            progressText.text = qsTr("Verifying... %1%").arg(Math.round(progress))
-        }
+        root.showVerifyProgress(now, total)
     }
 
     function onPreparationStatusUpdate(msg) {
@@ -657,25 +656,11 @@ WizardStepBase {
         target: imageWriter
 
         function onWriteProgress(now, total) {
-            if (root.isWriting) {
-                if (root.isIndeterminateProgress) {
-                    var bytesWrittenMB = Math.round(now / (1024 * 1024))
-                    progressText.text = qsTr("Writing… %1 MB written").arg(bytesWrittenMB)
-                } else {
-                    var progress = total > 0 ? (now / total) * 100 : 0
-                    progressBar.value = progress
-                    progressText.text = qsTr("Writing… %1%").arg(Math.round(progress))
-                }
-            }
+            root.showWriteProgress(now, total)
         }
 
         function onVerifyProgress(now, total) {
-            if (root.isWriting) {
-                root.operationWarning = ""
-                var progress = total > 0 ? (now / total) * 100 : 0
-                progressBar.value = progress
-                progressText.text = qsTr("Verifying… %1%").arg(Math.round(progress))
-            }
+            root.showVerifyProgress(now, total)
         }
 
         function onPreparationStatusUpdate(msg) {
@@ -704,8 +689,7 @@ WizardStepBase {
 
         function onFinalizing() {
             if (root.isWriting) {
-                progressText.text = qsTr("Finalising…")
-                progressBar.value = 100
+                root.showFinalizing()
             }
         }
 
@@ -722,7 +706,6 @@ WizardStepBase {
     // Focus management - rebuild when visibility changes between phases
     onIsWritingChanged: rebuildFocusOrder()
     onIsCompleteChanged: rebuildFocusOrder()
-    onAnyCustomizationsAppliedChanged: rebuildFocusOrder()
     
     Component.onCompleted: {
         // Configure image source and EVE config whenever this step is shown
@@ -742,12 +725,12 @@ WizardStepBase {
             var extractSize = cfg.eveIsCompressedImage ? cfg.eveImageSize : cfg.eveDownloadSize
             root.imageWriter.setSrc(cfg.eveDownloadUrl,
                                     cfg.eveDownloadSize, extractSize,
-                                    "", false, "EVE OS", cfg.selectedOsName)
+                                    "", false, "EVE-OS", cfg.selectedOsName)
         } else if (cfg.eveVersion.length > 0) {
             // Fallback: construct URL from version/arch/hv/platform
             var assetName = cfg.eveArch + "." + cfg.eveHypervisor + "." + cfg.evePlatform + ".installer.raw"
             var dlUrl = "https://github.com/lf-edge/eve/releases/download/" + cfg.eveVersion + "/" + assetName
-            root.imageWriter.setSrc(dlUrl, 0, 0, "", false, "EVE OS", cfg.selectedOsName)
+            root.imageWriter.setSrc(dlUrl, 0, 0, "", false, "EVE-OS", cfg.selectedOsName)
         }
         // Don't pass EVE config for ISO images — ISOs have no CONFIG partition
         if (!cfg.eveIsIsoImage) {
@@ -766,23 +749,11 @@ WizardStepBase {
                     items.push(summaryHeading)
                     items.push(osLabel)
                     items.push(storageLabel)
+                    items.push(configLabel)
                 }
             }
             return items
         }, 0)
-        
-        // Register customizations section as second focus group
-        registerFocusGroup("customizations", function() {
-            var items = []
-            if (customLayout.visible) {
-                // Only include heading when screen reader is active; always include scroll view
-                if (root.imageWriter && root.imageWriter.isScreenReaderActive()) {
-                    items.push(customizationsHeading)
-                }
-                items.push(customizationsScrollView)
-            }
-            return items
-        }, 1)
         
         // Register progress section (when writing/complete)
         registerFocusGroup("progress", function() {
