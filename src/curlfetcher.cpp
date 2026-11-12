@@ -20,7 +20,7 @@ class CurlFetchTask : public QRunnable
 {
 public:
     CurlFetchTask(CurlFetcher *fetcher, const QUrl &url)
-        : _fetcher(fetcher), _url(url)
+        : _fetcher(fetcher), _url(url), _firstBytes(fetcher ? fetcher->firstBytesOnly() : 0)
     {
         setAutoDelete(true);
     }
@@ -57,8 +57,16 @@ public:
         curl_easy_setopt(curl, CURLOPT_URL, urlBytes.constData());
         
         // Set up write callback to capture response data
+        WriteTarget target{&data, _firstBytes};
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeCallback);
-        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &data);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &target);
+
+        // Header-only fetch: ask for just the first bytes of the resource.
+        // (curl copies the string, so the temporary is fine.)
+        if (_firstBytes > 0) {
+            const QByteArray range = "0-" + QByteArray::number(_firstBytes - 1);
+            curl_easy_setopt(curl, CURLOPT_RANGE, range.constData());
+        }
         
         // Set up progress callback for cancellation support
         curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, progressCallback);
@@ -67,6 +75,13 @@ public:
         
         // Perform the request
         CURLcode res = curl_easy_perform(curl);
+
+        // A server may ignore the Range header and start sending everything.
+        // The write callback stops the transfer once the requested bytes are
+        // in, which curl reports as a write error; for us that is a success.
+        if (res == CURLE_WRITE_ERROR && _firstBytes > 0 && data.size() >= _firstBytes) {
+            res = CURLE_OK;
+        }
         
         // Track the effective URL after redirects (empty string if not available)
         QString effectiveUrlStr;
@@ -145,11 +160,26 @@ public:
     }
     
 private:
+    struct WriteTarget {
+        QByteArray *buffer;
+        qint64 limit;      // stop after this many bytes; 0 = no limit
+    };
+
     static size_t writeCallback(char *ptr, size_t size, size_t nmemb, void *userdata)
     {
-        auto *buffer = static_cast<QByteArray*>(userdata);
+        auto *target = static_cast<WriteTarget*>(userdata);
         size_t totalSize = size * nmemb;
-        buffer->append(ptr, static_cast<qsizetype>(totalSize));
+        if (target->limit > 0) {
+            const qint64 room = target->limit - target->buffer->size();
+            if (room < static_cast<qint64>(totalSize)) {
+                // Keep what still fits, then stop the transfer by reporting
+                // fewer bytes than we were given.
+                if (room > 0)
+                    target->buffer->append(ptr, static_cast<qsizetype>(room));
+                return 0;
+            }
+        }
+        target->buffer->append(ptr, static_cast<qsizetype>(totalSize));
         return totalSize;
     }
     
@@ -178,6 +208,7 @@ private:
     
     QPointer<CurlFetcher> _fetcher;  // QPointer to detect fetcher destruction
     QUrl _url;
+    qint64 _firstBytes;              // > 0: fetch only this many leading bytes
 };
 
 // ----------------------------------------------------------------------------

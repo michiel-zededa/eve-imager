@@ -75,17 +75,29 @@ jobs:
 
       - name: Install build dependencies
         run: |
-          sudo apt-get update
           # NB: liburing-dev is deliberately omitted. Ubuntu 22.04 ships
           # liburing 2.1, which lacks io_uring_sqe_set_data64 / *_cancel64 used
           # by the io_uring code path; the app compiles its non-io_uring
           # fallback when liburing is absent. Staying on 22.04 keeps the
           # AppImage's glibc requirement low for broad compatibility.
-          sudo apt-get install -y --no-install-recommends \
-            build-essential cmake ninja-build git pkg-config file \
-            libgnutls28-dev libudev-dev libdbus-1-dev \
-            libgl1-mesa-dev libxkbcommon-dev libvulkan-dev \
-            patchelf desktop-file-utils
+          #
+          # Retried: the hosted runners occasionally cannot resolve the Ubuntu
+          # package mirrors for a while. apt keeps what it already downloaded,
+          # so a retry only fetches the packages that are still missing.
+          for attempt in 1 2 3; do
+            if sudo apt-get update && \
+               sudo apt-get install -y --no-install-recommends \
+                 build-essential cmake ninja-build git pkg-config file \
+                 libgnutls28-dev libudev-dev libdbus-1-dev \
+                 libgl1-mesa-dev libxkbcommon-dev libvulkan-dev \
+                 patchelf desktop-file-utils; then
+              exit 0
+            fi
+            echo "::warning::apt attempt $attempt failed"
+            sleep 30
+          done
+          echo "::error::could not install build dependencies after 3 attempts"
+          exit 1
 
       - name: Install Qt ${{ env.QT_VERSION }}
         uses: jurplel/install-qt-action@v4
@@ -137,7 +149,7 @@ jobs:
 
   macos:
     name: macOS universal
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - name: Checkout
         uses: actions/checkout@v4

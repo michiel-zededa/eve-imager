@@ -35,6 +35,9 @@ WizardStepBase {
                    && platformCombo.currentIndex >= 0
                    && !noAssetWarning.visible
                    && !releaseFetcher.loading
+                   // Wait for the image size lookup (one small request), so the
+                   // next steps can check that the drive is large enough.
+                   && !releaseFetcher.probingImageSize
         } else {
             return localPathField.text.length > 0
         }
@@ -43,6 +46,14 @@ WizardStepBase {
     // ── EveReleaseFetcher instance ─────────────────────────────────────────
     EveReleaseFetcher {
         id: releaseFetcher
+
+        // The real (decompressed) size of the selected compressed image has
+        // been read from the file's header.
+        onImageSizeKnown: function(url, size) {
+            if (url === root.wizardContainer.eveDownloadUrl) {
+                root.wizardContainer.eveImageSize = size
+            }
+        }
 
         onReleasesReady: {
             // Restore prior version selection after a fetch (initial load only).
@@ -115,7 +126,20 @@ WizardStepBase {
         var hasAll = v.length > 0 && a.length > 0 && h.length > 0 && p.length > 0
         root.wizardContainer.eveDownloadUrl  = hasAll ? releaseFetcher.downloadUrl(v, a, h, p) : ""
         root.wizardContainer.eveDownloadSize = hasAll ? releaseFetcher.downloadSize(v, a, h, p) : 0
+        root.wizardContainer.eveIsCompressedImage = hasAll ? releaseFetcher.isCompressedAsset(v, a, h, p) : false
         root.wizardContainer.eveIsIsoImage   = hasAll ? releaseFetcher.isIsoAsset(v, a, h, p) : false
+        // Size the image takes on the drive. For uncompressed assets that is
+        // the download size. For compressed ones it has to be read from the
+        // file itself: use the value if we already have it and (re)start the
+        // lookup otherwise - onImageSizeKnown fills it in when it arrives.
+        if (!hasAll) {
+            root.wizardContainer.eveImageSize = 0
+        } else if (root.wizardContainer.eveIsCompressedImage) {
+            root.wizardContainer.eveImageSize = releaseFetcher.imageSize(root.wizardContainer.eveDownloadUrl)
+            releaseFetcher.probeImageSize(root.wizardContainer.eveDownloadUrl)
+        } else {
+            root.wizardContainer.eveImageSize = root.wizardContainer.eveDownloadSize
+        }
         root.wizardContainer.selectedOsName  = hasAll
                                                ? qsTr("EVE OS %1 · %2/%3/%4").arg(v).arg(a).arg(h).arg(p) : ""
     }
@@ -357,9 +381,23 @@ WizardStepBase {
                                 var p = root.platformModel[platformCombo.currentIndex] || ""
                                 var sz = releaseFetcher.downloadSize(v, a, h, p)
                                 var szStr = sz > 0 ? " (" + (sz / (1024*1024*1024)).toFixed(2) + " GB)" : ""
-                                var ext = releaseFetcher.isIsoAsset(v, a, h, p) ? "installer.iso" : "installer.raw"
-                                return qsTr("Will download: %1.%2.%3.%4%5")
-                                       .arg(a).arg(h).arg(p).arg(ext).arg(szStr)
+                                // Show the real asset name: it may be compressed
+                                // (.installer.raw.zst) rather than a plain .raw.
+                                var fileName = releaseFetcher.assetFileName(v, a, h, p)
+                                if (fileName.length === 0) {
+                                    var ext = releaseFetcher.isIsoAsset(v, a, h, p) ? "installer.iso" : "installer.raw"
+                                    fileName = a + "." + h + "." + p + "." + ext
+                                }
+                                var label = qsTr("Will download: %1%2").arg(fileName).arg(szStr)
+                                // Compressed images unpack to much more than the
+                                // download: say how large a drive is needed.
+                                var onDrive = root.wizardContainer.eveImageSize
+                                if (root.wizardContainer.eveIsCompressedImage && onDrive > 0) {
+                                    label += "\n" + qsTr("Needs a drive of at least %1").arg(root.imageWriter.formatSize(onDrive))
+                                } else if (releaseFetcher.probingImageSize) {
+                                    label += "\n" + qsTr("Checking the image size…")
+                                }
+                                return label
                             }
                             font.family: Style.fontFamily
                             font.pointSize: Style.fontSizeDescription
@@ -436,6 +474,8 @@ WizardStepBase {
             root.wizardContainer.useLocalImage   = true
             root.wizardContainer.eveDownloadUrl  = ""
             root.wizardContainer.eveDownloadSize = 0
+            root.wizardContainer.eveIsCompressedImage = false
+            root.wizardContainer.eveImageSize = 0   // local files are sized by the writer itself
             root.wizardContainer.selectedOsName  = root.wizardContainer.eveLocalImagePath.length > 0
                 ? qsTr("Local image: %1").arg(root.wizardContainer.eveLocalImagePath.split("/").pop())
                 : ""

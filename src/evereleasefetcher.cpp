@@ -7,10 +7,16 @@
 #include "curlfetcher.h"
 
 #include <QDebug>
+#include <QHash>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QMap>
+#include <QPair>
+#include <QRegularExpression>
+#include <QUrl>
 #include <algorithm>
+#include <limits>
 
 // GitHub API: 100 releases per page (maximum). EVE has 260+ releases so we
 // paginate to ensure all major-version LTS releases are visible.
@@ -128,6 +134,109 @@ void EveReleaseFetcher::onFetchError(const QString &errorMessage, const QUrl & /
     emit fetchFailed(errorMessage);
 }
 
+// ── Decompressed size of compressed images ───────────────────────────────────
+
+// A zstd frame header is at most 18 bytes (4 magic + 1 descriptor + 1 window
+// + 4 dictionary id + 8 content size); ask for a little more than that.
+static const qint64 ZSTD_HEADER_PROBE_BYTES = 64;
+
+qint64 EveReleaseFetcher::zstdFrameContentSize(const QByteArray &head)
+{
+    // Layout per RFC 8878, section 3.1.1.1 (all integers little-endian):
+    //   Magic_Number (4) | Frame_Header_Descriptor (1) | [Window_Descriptor (1)]
+    //   | [Dictionary_ID (0/1/2/4)] | [Frame_Content_Size (0/1/2/4/8)]
+    const auto *b = reinterpret_cast<const unsigned char *>(head.constData());
+    const qsizetype n = head.size();
+    if (n < 6 || b[0] != 0x28 || b[1] != 0xB5 || b[2] != 0x2F || b[3] != 0xFD)
+        return 0;
+
+    const unsigned descriptor   = b[4];
+    const unsigned fcsFlag      = descriptor >> 6;
+    const bool     singleSegment = (descriptor >> 5) & 1;
+    const unsigned dictFlag     = descriptor & 3;
+    if (descriptor & 0x08)      // reserved bit must be zero
+        return 0;
+
+    static const int dictBytes[4] = {0, 1, 2, 4};
+    static const int fcsBytesTab[4] = {0, 2, 4, 8};
+    int fcsBytes = fcsBytesTab[fcsFlag];
+    if (fcsFlag == 0 && singleSegment)
+        fcsBytes = 1;
+    if (fcsBytes == 0)          // frame does not state its content size
+        return 0;
+
+    qsizetype pos = 5;
+    if (!singleSegment)
+        pos += 1;               // Window_Descriptor
+    pos += dictBytes[dictFlag];
+    if (n < pos + fcsBytes)
+        return 0;
+
+    quint64 value = 0;
+    for (int i = fcsBytes - 1; i >= 0; --i)
+        value = (value << 8) | b[pos + i];
+    if (fcsBytes == 2)
+        value += 256;           // the 2-byte form is stored with an offset
+    if (value > quint64(std::numeric_limits<qint64>::max()))
+        return 0;
+    return qint64(value);
+}
+
+void EveReleaseFetcher::probeImageSize(const QString &url)
+{
+    if (url.isEmpty() || !url.endsWith(QLatin1String(".zst"), Qt::CaseInsensitive))
+        return;
+    if (_imageSizes.contains(url))
+        return;                 // already known
+    const QUrl requestUrl(url);
+    if (_pendingProbes.contains(requestUrl))
+        return;                 // already on its way
+
+    const bool wasIdle = _pendingProbes.isEmpty();
+    _pendingProbes.insert(requestUrl, url);
+    if (wasIdle)
+        emit probingImageSizeChanged();
+
+    auto *fetcher = new CurlFetcher(this);
+    fetcher->setFirstBytesOnly(ZSTD_HEADER_PROBE_BYTES);
+    connect(fetcher, &CurlFetcher::finished, this, &EveReleaseFetcher::onProbeFinished);
+    connect(fetcher, &CurlFetcher::error,    this, &EveReleaseFetcher::onProbeError);
+    fetcher->fetch(requestUrl);
+}
+
+qint64 EveReleaseFetcher::imageSize(const QString &url) const
+{
+    return _imageSizes.value(url, 0);
+}
+
+void EveReleaseFetcher::onProbeFinished(const QByteArray &data,
+                                        const QUrl &url,
+                                        const QUrl & /*effectiveUrl*/)
+{
+    const qint64 size = zstdFrameContentSize(data);
+    if (size <= 0)
+        qWarning() << "EveReleaseFetcher: no content size in the zstd header of" << url.toString();
+    finishProbe(url, size);
+}
+
+void EveReleaseFetcher::onProbeError(const QString &errorMessage, const QUrl &url)
+{
+    qWarning() << "EveReleaseFetcher: could not read the image size of" << url.toString()
+               << "-" << errorMessage;
+    finishProbe(url, 0);
+}
+
+void EveReleaseFetcher::finishProbe(const QUrl &url, qint64 size)
+{
+    const QString assetUrl = _pendingProbes.take(url);
+    if (!assetUrl.isEmpty() && size > 0) {
+        _imageSizes.insert(assetUrl, size);
+        emit imageSizeKnown(assetUrl, size);
+    }
+    if (_pendingProbes.isEmpty())
+        emit probingImageSizeChanged();
+}
+
 // ── JSON parsing ──────────────────────────────────────────────────────────────
 
 int EveReleaseFetcher::parseReleases(const QByteArray &json)
@@ -159,28 +268,14 @@ int EveReleaseFetcher::parseReleases(const QByteArray &json)
         if (tagName.isEmpty())
             continue;
 
-        // Detect LTS:
-        // 1. Explicit: tag or release title contains "lts"
-        // 2. Heuristic: even minor version (X.Y.Z where Y is even).
-        //    EVE follows the common convention that even minor = LTS,
-        //    odd minor = current/edge (e.g. 12.0.x, 12.2.x are LTS;
-        //    12.1.x, 12.3.x are current releases).
-        QString releaseName = ro["name"].toString();
-        bool isLts = tagName.contains(QLatin1String("lts"), Qt::CaseInsensitive)
-                  || releaseName.contains(QLatin1String("lts"), Qt::CaseInsensitive);
-        if (!isLts) {
-            // Strip leading 'v' prefix if present, then parse X.Y.Z
-            QString ver = tagName;
-            if (ver.startsWith(QLatin1Char('v')) || ver.startsWith(QLatin1Char('V')))
-                ver = ver.mid(1);
-            const QStringList parts = ver.split(QLatin1Char('.'));
-            if (parts.size() >= 2) {
-                bool ok = false;
-                int minor = parts.at(1).toInt(&ok);
-                if (ok && (minor % 2 == 0))
-                    isLts = true;
-            }
-        }
+        // Detect LTS: EVE tags its LTS releases "X.Y.Z-lts". That suffix is the
+        // only reliable signal — the minor version's parity is not (14.5.5-lts
+        // is an LTS release with an odd minor), so no guessing from the number.
+        static const QRegularExpression ltsTagRe(
+            QStringLiteral("^v?(\\d+)\\.(\\d+)\\.(\\d+)-lts$"),
+            QRegularExpression::CaseInsensitiveOption);
+        const QRegularExpressionMatch ltsMatch = ltsTagRe.match(tagName);
+        const bool isLts = ltsMatch.hasMatch();
 
         // Parse publication date for chronological sorting
         QDateTime publishedAt = QDateTime::fromString(
@@ -229,6 +324,10 @@ int EveReleaseFetcher::parseReleases(const QByteArray &json)
             asset.downloadUrl = ao["browser_download_url"].toString();
             asset.size        = ao["size"].toVariant().toLongLong();
             asset.isIso       = isIso;
+            // .raw.zst is zstd-compressed and .installer.img is gzip-compressed;
+            // for both, the asset size is the compressed size, not the image size.
+            asset.isCompressed = isRawZst
+                              || name.endsWith(QLatin1String(".installer.img"));
 
             // Sanity-check: a real EVE installer is always >250 MB even when compressed.
             // Tiny assets in old releases are bootstrap/netboot files, not full disk images.
@@ -236,9 +335,12 @@ int EveReleaseFetcher::parseReleases(const QByteArray &json)
             if (asset.size > 0 && asset.size < MIN_INSTALLER_BYTES)
                 continue;
 
-            // Priority: .raw (1) > .raw.zst (2) > .iso (3)
+            // Priority: .raw.zst (1) > .raw / legacy .img (2) > .iso (3)
             // For each arch/hv/platform combo keep only the highest-priority asset.
-            int newPriority = isRaw ? 1 : isRawZst ? 2 : 3;
+            // The zstd-compressed raw image is preferred over the plain one: it is
+            // the same disk image, a much smaller download, and it is decompressed
+            // on the fly while writing.
+            int newPriority = isRawZst ? 1 : isRaw ? 2 : 3;
 
             bool replaced = false;
             for (int i = 0; i < assets.size(); ++i) {
@@ -247,7 +349,7 @@ int EveReleaseFetcher::parseReleases(const QByteArray &json)
                     && assets[i].platform == asset.platform) {
                     // Replace existing only if new asset has higher priority
                     int existingPriority = assets[i].isIso ? 3
-                                        : assets[i].downloadUrl.endsWith(QLatin1String(".zst")) ? 2 : 1;
+                                        : assets[i].downloadUrl.endsWith(QLatin1String(".zst")) ? 1 : 2;
                     if (newPriority < existingPriority)
                         assets[i] = asset;
                     replaced = true;
@@ -268,6 +370,11 @@ int EveReleaseFetcher::parseReleases(const QByteArray &json)
         rel.version     = tagName;
         rel.publishedAt = publishedAt;
         rel.isLts       = isLts;
+        if (isLts) {
+            rel.verMajor = ltsMatch.captured(1).toInt();
+            rel.verMinor = ltsMatch.captured(2).toInt();
+            rel.verPatch = ltsMatch.captured(3).toInt();
+        }
         rel.assets      = assets;
         _releases.append(rel);
     }
@@ -287,41 +394,44 @@ QStringList EveReleaseFetcher::versions() const
         if (r.isLts) { anyLts = true; break; }
     }
 
-    // LTS filter active: show the single best LTS release per major version.
-    // "Best" = latest LTS with arm64 assets; fall back to latest LTS with any arch.
-    // Releases are already sorted newest-first, so the first qualifying entry wins.
+    // LTS filter active: show the newest patch release of every LTS line (X.Y).
+    //
+    // "Newest" is decided by the patch number, not the publication date, so a
+    // back-ported patch on an older line cannot shadow anything.
+    //
+    // The newest patch is tracked per architecture: if the newest patch of a
+    // line was published without (say) arm64 assets, the newest older patch
+    // that does have them is listed as well, so no architecture loses access
+    // to a line. In the normal case every architecture agrees and the line
+    // contributes exactly one entry.
     if (!_showNonLts && anyLts) {
-        // Pass 1: latest LTS with arm64 per major
-        QHash<QString, QString> arm64Best;   // major -> version
-        QHash<QString, QString> anyBest;     // major -> version (any arch)
+        struct Pick { int patch = -1; QString version; };
+        // (major, minor) -> arch -> newest patch offering that arch
+        QMap<QPair<int, int>, QHash<QString, Pick>> lines;
         for (const ReleaseInfo &r : _releases) {
             if (!r.isLts) continue;
-            QString ver = r.version;
-            if (ver.startsWith(QLatin1Char('v'), Qt::CaseInsensitive))
-                ver = ver.mid(1);
-            const QString major = ver.section(QLatin1Char('.'), 0, 0);
-            bool hasArm64 = false;
-            for (const AssetInfo &a : r.assets)
-                if (a.arch == QLatin1String("arm64")) { hasArm64 = true; break; }
-            if (!anyBest.contains(major))
-                anyBest[major] = r.version;
-            if (hasArm64 && !arm64Best.contains(major))
-                arm64Best[major] = r.version;
+            QHash<QString, Pick> &byArch = lines[qMakePair(r.verMajor, r.verMinor)];
+            for (const AssetInfo &a : r.assets) {
+                Pick &p = byArch[a.arch];
+                if (r.verPatch > p.patch) {
+                    p.patch = r.verPatch;
+                    p.version = r.version;
+                }
+            }
         }
-        // Pick arm64-capable version; fall back to any-arch version
+
+        // Newest line first; within a line, newest patch first.
         QStringList result;
-        for (auto it = anyBest.keyBegin(); it != anyBest.keyEnd(); ++it) {
-            const QString &major = *it;
-            result.append(arm64Best.value(major, anyBest.value(major)));
+        for (auto line = lines.constEnd(); line != lines.constBegin(); ) {
+            --line;
+            QMap<int, QString> byPatch;   // patch -> version (de-duplicates arches)
+            for (const Pick &p : line.value())
+                byPatch.insert(p.patch, p.version);
+            for (auto v = byPatch.constEnd(); v != byPatch.constBegin(); ) {
+                --v;
+                result.append(v.value());
+            }
         }
-        // Sort by major version number descending (16.x before 14.x before 9.x)
-        std::sort(result.begin(), result.end(), [](const QString &a, const QString &b) {
-            auto majorOf = [](const QString &v) {
-                QString s = v.startsWith(QLatin1Char('v'), Qt::CaseInsensitive) ? v.mid(1) : v;
-                return s.section(QLatin1Char('.'), 0, 0).toInt();
-            };
-            return majorOf(a) > majorOf(b);
-        });
         return result;
     }
 
@@ -430,4 +540,22 @@ bool EveReleaseFetcher::isIsoAsset(const QString &version,
 {
     const AssetInfo *a = findAsset(version, arch, hypervisor, platform);
     return a ? a->isIso : false;
+}
+
+bool EveReleaseFetcher::isCompressedAsset(const QString &version,
+                                          const QString &arch,
+                                          const QString &hypervisor,
+                                          const QString &platform) const
+{
+    const AssetInfo *a = findAsset(version, arch, hypervisor, platform);
+    return a ? a->isCompressed : false;
+}
+
+QString EveReleaseFetcher::assetFileName(const QString &version,
+                                         const QString &arch,
+                                         const QString &hypervisor,
+                                         const QString &platform) const
+{
+    const AssetInfo *a = findAsset(version, arch, hypervisor, platform);
+    return a ? QUrl(a->downloadUrl).fileName() : QString();
 }

@@ -108,6 +108,10 @@ public:
     /* Cancel write */
     Q_INVOKABLE void cancelWrite();
 
+    /* Forget the outcome of the previous write (succeeded, failed or cancelled)
+       so that a new one can be set up. No effect while a write is in progress. */
+    Q_INVOKABLE void resetWriteState();
+
     /* Skip cache verification and proceed with download */
     Q_INVOKABLE void skipCacheVerification();
 

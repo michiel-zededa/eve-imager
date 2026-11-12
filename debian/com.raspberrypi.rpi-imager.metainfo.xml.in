@@ -16,11 +16,6 @@
       the utility fetches the matching installer image, streams it straight to
       the USB drive, and verifies the written data afterwards.
     </p>
-    <p>
-      EVE Imager also caches the downloaded image – that is to say, it saves a
-      local copy on your computer, so you can program additional drives without
-      having to download the file again.
-    </p>
   </description>
   <launchable type="desktop-id">com.raspberrypi.rpi-imager.desktop</launchable>
   <url type="homepage">https://github.com/michiel-zededa/eve-imager</url>

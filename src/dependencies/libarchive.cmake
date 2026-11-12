@@ -27,54 +27,28 @@ set(ENABLE_ZSTD ON CACHE BOOL "")
 set(POSIX_REGEX_LIB "libc" CACHE STRING "" FORCE)
 set(LIBARCHIVE_VERSION "3.8.6")
 
-# Patch to improve ZSTD static detection
-set(LIBARCHIVE_PATCH_FILE "${CMAKE_CURRENT_BINARY_DIR}/libarchive_zstd_patch.cmake")
-file(WRITE ${LIBARCHIVE_PATCH_FILE} "
-# Read the original CMakeLists.txt
-file(READ \"${CMAKE_CURRENT_SOURCE_DIR}/CMakeLists.txt\" CONTENT)
-
-# Find the start and end of the ZSTD section
-string(FIND \"${CONTENT}\" \"IF(ZSTD_FOUND)\" ZSTD_START)
-string(FIND \"${CONTENT}\" \"MARK_AS_ADVANCED(CLEAR ZSTD_INCLUDE_DIR)\" ZSTD_END)
-
-if(ZSTD_START GREATER -1 AND ZSTD_END GREATER -1)
-    math(EXPR ZSTD_END \"${ZSTD_END} + 40\")
-    string(SUBSTRING \"${CONTENT}\" 0 ${ZSTD_START} BEFORE_ZSTD)
-    string(SUBSTRING \"${CONTENT}\" ${ZSTD_END} -1 AFTER_ZSTD)
-    set(NEW_ZSTD_SECTION \"IF(ZSTD_FOUND)
-  SET(HAVE_ZSTD_H 1)
-  INCLUDE_DIRECTORIES(${ZSTD_INCLUDE_DIR})
-  LIST(APPEND ADDITIONAL_LIBS ${ZSTD_LIBRARY})
-  get_property(ZSTD_LIB_IS_CACHE CACHE ZSTD_LIBRARY PROPERTY TYPE)
-  get_property(ZSTD_INC_IS_CACHE CACHE ZSTD_INCLUDE_DIR PROPERTY TYPE)
-  if(ZSTD_LIB_IS_CACHE AND ZSTD_INC_IS_CACHE)
-    message(STATUS \\\"Using provided ZSTD library: ${ZSTD_LIBRARY}\\\")
-    SET(HAVE_LIBZSTD 1)
-    SET(HAVE_ZSTD_compressStream 1)
-    SET(HAVE_ZSTD_minCLevel 1)
-  else()
-    CMAKE_PUSH_CHECK_STATE()
-    SET(CMAKE_REQUIRED_LIBRARIES ${ZSTD_LIBRARY})
-    SET(CMAKE_REQUIRED_INCLUDES ${ZSTD_INCLUDE_DIR})
-    CHECK_FUNCTION_EXISTS(ZSTD_decompressStream HAVE_LIBZSTD)
-    CHECK_FUNCTION_EXISTS(ZSTD_compressStream HAVE_ZSTD_compressStream)
-    CHECK_FUNCTION_EXISTS(ZSTD_minCLevel HAVE_ZSTD_minCLevel)
-    CMAKE_POP_CHECK_STATE()
-  endif()
-ENDIF(ZSTD_FOUND)
-MARK_AS_ADVANCED(CLEAR ZSTD_INCLUDE_DIR)\")
-    set(NEW_CONTENT \"${BEFORE_ZSTD}${NEW_ZSTD_SECTION}\")
-    file(WRITE \"${CMAKE_CURRENT_SOURCE_DIR}/CMakeLists.txt\" \"${NEW_CONTENT}${AFTER_ZSTD}\")
-    message(STATUS \"Patched libarchive CMakeLists.txt for static ZSTD support\")
-else()
-    message(WARNING \"Could not find ZSTD section in libarchive CMakeLists.txt\")
-endif()
-")
+# zstd support.
+#
+# libarchive decides whether it can call libzstd directly by link-testing
+# ZSTD_decompressStream & co. against ${ZSTD_LIBRARY} at configure time
+# (CHECK_FUNCTION_EXISTS). Our zstd is the bundled one, which has not been
+# built yet when libarchive is configured, so that link test always fails.
+# libarchive then still accepts zstd input, but by spawning an external
+# "zstd -d -qq" program - which does not exist on end-user machines, so
+# writing a .zst image failed with:
+#   "Can't initialize filter; unable to run program "zstd -d -qq""
+#
+# The bundled zstd (see zstd.cmake) is known to provide these functions, so
+# answer the checks up front; CHECK_FUNCTION_EXISTS skips a result that is
+# already in the cache. INTERNAL implies FORCE, which also repairs build
+# directories that cached the failed result.
+set(HAVE_LIBZSTD 1 CACHE INTERNAL "bundled zstd provides ZSTD_decompressStream")
+set(HAVE_ZSTD_compressStream 1 CACHE INTERNAL "bundled zstd provides ZSTD_compressStream")
+set(HAVE_ZSTD_minCLevel 1 CACHE INTERNAL "bundled zstd provides ZSTD_minCLevel")
 
 FetchContent_Declare(libarchive
     GIT_REPOSITORY https://github.com/libarchive/libarchive.git
     GIT_TAG v${LIBARCHIVE_VERSION}
-    PATCH_COMMAND ${CMAKE_COMMAND} -P ${LIBARCHIVE_PATCH_FILE}
     ${USE_OVERRIDE_FIND_PACKAGE}
 )
 FetchContent_GetProperties(libarchive)
@@ -85,6 +59,9 @@ endif()
 
 if (TARGET archive_static AND TARGET ZLIB::ZLIB)
     add_dependencies(archive_static ZLIB::ZLIB)
+endif()
+if (TARGET archive_static AND TARGET libzstd_static)
+    add_dependencies(archive_static libzstd_static)
 endif()
 
 unset(POSIX_REGEX_LIB)

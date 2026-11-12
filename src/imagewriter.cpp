@@ -524,7 +524,18 @@ void ImageWriter::setSrc(const QUrl &url, quint64 downloadLen, quint64 extrLen, 
     // Gzip ISIZE is 32-bit, so uncompressed size is unreliable for files >4GB.
     // When no trusted extract size is provided by the manifest, mark it so the
     // UI can show indeterminate progress instead of a misleading percentage.
-    _extractSizeKnown = !(!_extrLen && url.toString().toLower().endsWith(".gz"));
+    //
+    // The same applies to remote compressed EVE installer images
+    // (.installer.raw.zst, and the legacy gzip'd .installer.img): the release
+    // metadata only gives the compressed download size, so a percentage
+    // computed against it would be wrong (and exceed 100%). Local compressed
+    // files are excluded here because their size is parsed further below.
+    {
+        const QString lowerUrl = url.toString().toLower();
+        const bool remoteCompressedEveImage = !url.isLocalFile()
+            && (lowerUrl.endsWith(".zst") || lowerUrl.endsWith(".installer.img"));
+        _extractSizeKnown = !(!_extrLen && (lowerUrl.endsWith(".gz") || remoteCompressedEveImage));
+    }
 
     qDebug() << "setSrc: initFormat parameter:" << initFormat << "-> _initFormat set to:" << _initFormat;
 
@@ -2499,6 +2510,23 @@ void ImageWriter::setWriteState(WriteState state)
     }
     
     emit writeStateChanged();
+}
+
+/* The write state machine only ever left its terminal states (Succeeded,
+ * Failed, Cancelled) when the device selection was cleared, which the EVE
+ * wizard never does. The outcome of one write therefore leaked into the next
+ * visit of the write step: after a cancelled or failed write the step came
+ * back showing the stale progress view with the Write button disabled, and
+ * only restarting the app helped. The wizard calls this whenever the user
+ * moves on from a finished write. */
+void ImageWriter::resetWriteState()
+{
+    if (_writeState == WriteState::Succeeded ||
+        _writeState == WriteState::Failed ||
+        _writeState == WriteState::Cancelled) {
+        qDebug() << "Resetting write state from" << _writeState << "to Idle";
+        setWriteState(WriteState::Idle);
+    }
 }
 
 void ImageWriter::setVerifyEnabled(bool verify)
