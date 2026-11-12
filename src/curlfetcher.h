@@ -44,6 +44,18 @@ public:
      * @param url The URL to fetch
      */
     void fetch(const QUrl &url);
+
+    /**
+     * Fetch only the first @p bytes bytes of the resource instead of all of
+     * it (HTTP Range request). Call before fetch(). Used to read a file
+     * header without downloading the file.
+     *
+     * finished() then delivers at most @p bytes bytes; fewer if the resource
+     * is shorter. If the server ignores the Range header, the transfer is
+     * stopped as soon as the requested bytes have arrived.
+     */
+    void setFirstBytesOnly(qint64 bytes) { _firstBytes = bytes > 0 ? bytes : 0; }
+    qint64 firstBytesOnly() const { return _firstBytes; }
     
     /**
      * Cancel an in-progress fetch.
@@ -94,6 +106,7 @@ public slots:
 private:
     QUrl _url;
     std::atomic<bool> _cancelled{false};
+    qint64 _firstBytes = 0;   // 0 = fetch the whole resource
 };
 
 #endif // CURLFETCHER_H

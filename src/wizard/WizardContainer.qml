@@ -101,7 +101,8 @@ Item {
     property bool   useLocalImage: false
     property string eveDownloadUrl: ""        // resolved by EveVersionStep.syncState()
     property double eveDownloadSize: 0        // download size in bytes (compressed size if eveIsCompressedImage; double avoids int32 overflow)
-    property bool   eveIsCompressedImage: false // true = .raw.zst / legacy .img: extracted image size is not known up front
+    property bool   eveIsCompressedImage: false // true = .raw.zst / legacy .img: eveDownloadSize is not the size written to the drive
+    property double eveImageSize: 0           // size of the image as written to the drive, in bytes; 0 = not known
     property bool   eveIsIsoImage: false      // true = ISO asset (no config customization)
 
     // ── EVE device configuration ──────────────────────────────────────────

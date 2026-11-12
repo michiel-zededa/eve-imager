@@ -16,6 +16,7 @@
 #include <QRegularExpression>
 #include <QUrl>
 #include <algorithm>
+#include <limits>
 
 // GitHub API: 100 releases per page (maximum). EVE has 260+ releases so we
 // paginate to ensure all major-version LTS releases are visible.
@@ -131,6 +132,109 @@ void EveReleaseFetcher::onFetchError(const QString &errorMessage, const QUrl & /
     setStatusMessage(tr("Error: %1").arg(errorMessage));
     qWarning() << "EveReleaseFetcher: fetch error:" << errorMessage;
     emit fetchFailed(errorMessage);
+}
+
+// ── Decompressed size of compressed images ───────────────────────────────────
+
+// A zstd frame header is at most 18 bytes (4 magic + 1 descriptor + 1 window
+// + 4 dictionary id + 8 content size); ask for a little more than that.
+static const qint64 ZSTD_HEADER_PROBE_BYTES = 64;
+
+qint64 EveReleaseFetcher::zstdFrameContentSize(const QByteArray &head)
+{
+    // Layout per RFC 8878, section 3.1.1.1 (all integers little-endian):
+    //   Magic_Number (4) | Frame_Header_Descriptor (1) | [Window_Descriptor (1)]
+    //   | [Dictionary_ID (0/1/2/4)] | [Frame_Content_Size (0/1/2/4/8)]
+    const auto *b = reinterpret_cast<const unsigned char *>(head.constData());
+    const qsizetype n = head.size();
+    if (n < 6 || b[0] != 0x28 || b[1] != 0xB5 || b[2] != 0x2F || b[3] != 0xFD)
+        return 0;
+
+    const unsigned descriptor   = b[4];
+    const unsigned fcsFlag      = descriptor >> 6;
+    const bool     singleSegment = (descriptor >> 5) & 1;
+    const unsigned dictFlag     = descriptor & 3;
+    if (descriptor & 0x08)      // reserved bit must be zero
+        return 0;
+
+    static const int dictBytes[4] = {0, 1, 2, 4};
+    static const int fcsBytesTab[4] = {0, 2, 4, 8};
+    int fcsBytes = fcsBytesTab[fcsFlag];
+    if (fcsFlag == 0 && singleSegment)
+        fcsBytes = 1;
+    if (fcsBytes == 0)          // frame does not state its content size
+        return 0;
+
+    qsizetype pos = 5;
+    if (!singleSegment)
+        pos += 1;               // Window_Descriptor
+    pos += dictBytes[dictFlag];
+    if (n < pos + fcsBytes)
+        return 0;
+
+    quint64 value = 0;
+    for (int i = fcsBytes - 1; i >= 0; --i)
+        value = (value << 8) | b[pos + i];
+    if (fcsBytes == 2)
+        value += 256;           // the 2-byte form is stored with an offset
+    if (value > quint64(std::numeric_limits<qint64>::max()))
+        return 0;
+    return qint64(value);
+}
+
+void EveReleaseFetcher::probeImageSize(const QString &url)
+{
+    if (url.isEmpty() || !url.endsWith(QLatin1String(".zst"), Qt::CaseInsensitive))
+        return;
+    if (_imageSizes.contains(url))
+        return;                 // already known
+    const QUrl requestUrl(url);
+    if (_pendingProbes.contains(requestUrl))
+        return;                 // already on its way
+
+    const bool wasIdle = _pendingProbes.isEmpty();
+    _pendingProbes.insert(requestUrl, url);
+    if (wasIdle)
+        emit probingImageSizeChanged();
+
+    auto *fetcher = new CurlFetcher(this);
+    fetcher->setFirstBytesOnly(ZSTD_HEADER_PROBE_BYTES);
+    connect(fetcher, &CurlFetcher::finished, this, &EveReleaseFetcher::onProbeFinished);
+    connect(fetcher, &CurlFetcher::error,    this, &EveReleaseFetcher::onProbeError);
+    fetcher->fetch(requestUrl);
+}
+
+qint64 EveReleaseFetcher::imageSize(const QString &url) const
+{
+    return _imageSizes.value(url, 0);
+}
+
+void EveReleaseFetcher::onProbeFinished(const QByteArray &data,
+                                        const QUrl &url,
+                                        const QUrl & /*effectiveUrl*/)
+{
+    const qint64 size = zstdFrameContentSize(data);
+    if (size <= 0)
+        qWarning() << "EveReleaseFetcher: no content size in the zstd header of" << url.toString();
+    finishProbe(url, size);
+}
+
+void EveReleaseFetcher::onProbeError(const QString &errorMessage, const QUrl &url)
+{
+    qWarning() << "EveReleaseFetcher: could not read the image size of" << url.toString()
+               << "-" << errorMessage;
+    finishProbe(url, 0);
+}
+
+void EveReleaseFetcher::finishProbe(const QUrl &url, qint64 size)
+{
+    const QString assetUrl = _pendingProbes.take(url);
+    if (!assetUrl.isEmpty() && size > 0) {
+        _imageSizes.insert(assetUrl, size);
+        emit imageSizeKnown(assetUrl, size);
+    }
+    if (_pendingProbes.isEmpty())
+        emit probingImageSizeChanged();
 }
 
 // ── JSON parsing ──────────────────────────────────────────────────────────────

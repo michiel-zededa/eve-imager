@@ -342,11 +342,13 @@ WizardStepBase {
             property string fastbootStorageType: modelData && typeof modelData.fastbootStorageType !== "undefined" ? modelData.fastbootStorageType : ""
 
             readonly property bool shouldHide: isSystem && filterSystemDrives.checked
-            readonly property bool unselectable: isReadOnly && !isRpiboot && !isFastbootStorage
+            // The drive cannot hold the selected image (only when the image size is known)
+            readonly property bool tooSmall: !isRpiboot && !isFastbootStorage && root.isTooSmallForImage(size)
+            readonly property bool unselectable: (isReadOnly && !isRpiboot && !isFastbootStorage) || tooSmall
             
             // Accessibility properties
             Accessible.role: Accessible.ListItem
-            Accessible.name: dstitem.description + ". " + imageWriter.formatSize(parseFloat(dstitem.size)) + (dstitem.mountpoints.length > 0 ? ". " + qsTr("Mounted as %1").arg(dstitem.mountpoints.join(", ")) : "") + (dstitem.unselectable ? ". " + qsTr("Read-only") : "")
+            Accessible.name: dstitem.description + ". " + imageWriter.formatSize(parseFloat(dstitem.size)) + (dstitem.mountpoints.length > 0 ? ". " + qsTr("Mounted as %1").arg(dstitem.mountpoints.join(", ")) : "") + (dstitem.tooSmall ? ". " + root.tooSmallText() : (dstitem.unselectable ? ". " + qsTr("Read-only") : ""))
             Accessible.focusable: true
             Accessible.ignored: false
             
@@ -466,9 +468,9 @@ WizardStepBase {
                         }
                     }
                     
-                    // Read-only indicator
+                    // Read-only / too-small indicator
                     Text {
-                        text: qsTr("Read-only")
+                        text: dstitem.tooSmall ? root.tooSmallText() : qsTr("Read-only")
                         font.pointSize: Style.fontSizeDescription
                         font.family: Style.fontFamily
                         color: Style.formLabelErrorColor
@@ -480,6 +482,18 @@ WizardStepBase {
         }
     }
     
+    // True if a drive of this size (bytes) cannot hold the selected image.
+    // Always false while the image size is not known (0).
+    function isTooSmallForImage(deviceSize) {
+        var need = root.wizardContainer ? root.wizardContainer.eveImageSize : 0
+        var have = parseFloat(deviceSize)
+        return need > 0 && have > 0 && have < need
+    }
+
+    function tooSmallText() {
+        return qsTr("Too small: the image needs %1").arg(imageWriter.formatSize(root.wizardContainer.eveImageSize))
+    }
+
     // Storage selection function
     function selectDstItem(dstitem) {
         if (dstitem.unselectable) {
@@ -538,6 +552,9 @@ WizardStepBase {
         if (isReadOnly) {
             return  // Can't select read-only devices
         }
+        if (root.isTooSmallForImage(model.data(modelIndex, sizeRole))) {
+            return  // Can't select devices the image does not fit on
+        }
 
         var isSystem = model.data(modelIndex, isSystemRole)
         var device = model.data(modelIndex, deviceRole)
@@ -568,6 +585,7 @@ WizardStepBase {
             return false
         }
         
+        var sizeRole = 0x103
         var isReadOnlyRole = 0x106
         var isSystemRole = 0x107
         
@@ -575,9 +593,10 @@ WizardStepBase {
         var isReadOnly = model.data(idx, isReadOnlyRole)
         var isSystem = model.data(idx, isSystemRole)
         
-        // Item is selectable if it's not read-only and either not a system drive or filter is off
+        // Item is selectable if it's not read-only, large enough for the image,
+        // and either not a system drive or filter is off
         var shouldHide = isSystem && filterSystemDrives.checked
-        return !isReadOnly && !shouldHide
+        return !isReadOnly && !shouldHide && !root.isTooSmallForImage(model.data(idx, sizeRole))
     }
     
     // Check if there are any selectable items in the list

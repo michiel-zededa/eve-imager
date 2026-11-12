@@ -19,8 +19,10 @@
 #define EVERELEASEFETCHER_H
 
 #include <QDateTime>
+#include <QHash>
 #include <QObject>
 #include <QStringList>
+#include <QUrl>
 #include <QVariantMap>
 #ifndef CLI_ONLY_BUILD
 #include <QQmlEngine>
@@ -94,6 +96,14 @@ public:
     bool showNonLts() const { return _showNonLts; }
     void setShowNonLts(bool v);
 
+    /**
+     * True while the size of a compressed image is being looked up (see
+     * probeImageSize()). The lookup is one small request and normally takes
+     * well under a second.
+     */
+    Q_PROPERTY(bool probingImageSize READ probingImageSize NOTIFY probingImageSizeChanged)
+    bool probingImageSize() const { return !_pendingProbes.isEmpty(); }
+
     // ── Invokable queries ─────────────────────────────────────────────────
 
     /** Trigger an async fetch from the GitHub Releases API. */
@@ -149,8 +159,33 @@ public:
                                       const QString &hypervisor,
                                       const QString &platform) const;
 
+    /**
+     * Look up how large a zstd-compressed image (.zst) is once decompressed,
+     * i.e. how much space it needs on the drive. The release metadata only
+     * gives the compressed download size; the real size is stored in the
+     * first bytes of the file, so only those are fetched.
+     *
+     * Asynchronous: imageSizeKnown() is emitted when the size has been read.
+     * Nothing is emitted if it cannot be determined (the size then stays
+     * unknown, which the writer copes with). Does nothing for other URLs or
+     * for a URL that was already looked up.
+     */
+    Q_INVOKABLE void probeImageSize(const QString &url);
+
+    /** Decompressed size in bytes found by probeImageSize() for this URL, or 0 if not known. */
+    Q_INVOKABLE qint64 imageSize(const QString &url) const;
+
+    /**
+     * Decompressed size announced in the header of a zstd frame, given the
+     * first bytes of the file; 0 if the data is not a zstd frame or the frame
+     * does not state its content size.
+     */
+    static qint64 zstdFrameContentSize(const QByteArray &head);
+
 signals:
     void releasesReady();
+    void probingImageSizeChanged();
+    void imageSizeKnown(const QString &url, qint64 size);
     void loadingChanged();
     void fetchFailedChanged();
     void statusMessageChanged();
@@ -160,8 +195,12 @@ signals:
 private slots:
     void onFetchFinished(const QByteArray &data, const QUrl &url, const QUrl &effectiveUrl);
     void onFetchError(const QString &errorMessage, const QUrl &url);
+    void onProbeFinished(const QByteArray &data, const QUrl &url, const QUrl &effectiveUrl);
+    void onProbeError(const QString &errorMessage, const QUrl &url);
 
 private:
+    void finishProbe(const QUrl &url, qint64 size);
+
     void fetchPage(int page);
     int  parseReleases(const QByteArray &json);  // returns raw JSON entry count
     void setLoading(bool v);
@@ -174,6 +213,8 @@ private:
                                const QString &platform) const;
 
     QList<ReleaseInfo> _releases;
+    QHash<QString, qint64> _imageSizes;    // asset URL -> decompressed size, once probed
+    QHash<QUrl, QString>   _pendingProbes; // request URL -> asset URL as given by the caller
     bool    _loading     = false;
     bool    _fetchFailed = false;
     bool    _showNonLts  = false;
