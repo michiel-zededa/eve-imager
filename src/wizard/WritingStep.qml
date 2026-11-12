@@ -694,6 +694,14 @@ WizardStepBase {
             progressText.text = qsTr("Write failed")
         }
 
+        // The user cancelled the write: go back to the summary, ready to
+        // write again (this is what the Cancel button's description promises).
+        // Without this the step stayed on an empty progress view with the
+        // Write button disabled.
+        function onCancelled() {
+            root.imageWriter.resetWriteState()
+        }
+
         function onFinalizing() {
             if (root.isWriting) {
                 progressText.text = qsTr("Finalising…")

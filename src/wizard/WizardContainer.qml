@@ -176,6 +176,16 @@ Item {
     function getWizardStepFromSidebarIndex(sidebarIndex) { return sidebarIndex }
 
     // ── Navigation ────────────────────────────────────────────────────────
+    // A finished write (succeeded, failed or cancelled) stays recorded in the
+    // writer until it is told otherwise. Clear it whenever the user moves to
+    // any step other than Done, so that the write step always starts from a
+    // clean summary instead of showing the previous run's outcome.
+    function forgetFinishedWrite(targetStep) {
+        if (targetStep !== stepDone) {
+            imageWriter.resetWriteState()
+        }
+    }
+
     function nextStep() {
         if (root.currentStep >= root.totalSteps - 1) return
 
@@ -193,6 +203,7 @@ Item {
         }
 
         markStepPermissible(next)
+        forgetFinishedWrite(next)
         root.currentStep = next
         var comp = getStepComponent(next)
         if (comp) { wizardStack.clear(); wizardStack.push(comp) }
@@ -207,6 +218,7 @@ Item {
             prev = stepStorageSelection
         }
 
+        forgetFinishedWrite(prev)
         root.currentStep = prev
         var comp = getStepComponent(prev)
         if (comp) { wizardStack.clear(); wizardStack.push(comp) }
@@ -214,6 +226,7 @@ Item {
 
     function jumpToStep(stepIndex) {
         if (stepIndex < 0 || stepIndex >= root.totalSteps) return
+        forgetFinishedWrite(stepIndex)
         root.currentStep = stepIndex
         var comp = getStepComponent(stepIndex)
         if (comp) { wizardStack.clear(); wizardStack.push(comp) }

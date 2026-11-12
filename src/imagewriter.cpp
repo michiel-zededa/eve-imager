@@ -2512,6 +2512,23 @@ void ImageWriter::setWriteState(WriteState state)
     emit writeStateChanged();
 }
 
+/* The write state machine only ever left its terminal states (Succeeded,
+ * Failed, Cancelled) when the device selection was cleared, which the EVE
+ * wizard never does. The outcome of one write therefore leaked into the next
+ * visit of the write step: after a cancelled or failed write the step came
+ * back showing the stale progress view with the Write button disabled, and
+ * only restarting the app helped. The wizard calls this whenever the user
+ * moves on from a finished write. */
+void ImageWriter::resetWriteState()
+{
+    if (_writeState == WriteState::Succeeded ||
+        _writeState == WriteState::Failed ||
+        _writeState == WriteState::Cancelled) {
+        qDebug() << "Resetting write state from" << _writeState << "to Idle";
+        setWriteState(WriteState::Idle);
+    }
+}
+
 void ImageWriter::setVerifyEnabled(bool verify)
 {
     _verifyEnabled = verify;
