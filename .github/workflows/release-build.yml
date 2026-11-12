@@ -13,9 +13,6 @@ name: Build release binaries
 #     binaries as workflow artifacts (handy for validating the pipeline).
 
 on:
-  # TEMPORARY: build this branch on every push, to test the UI revamp. Remove before merging.
-  push:
-    branches: [claude/eve-imager-version-sync-iqhhlp]
   release:
     types: [published]
   workflow_dispatch:
