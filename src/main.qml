@@ -27,10 +27,20 @@ ApplicationWindow {
     // Expose overlay root to child components for dialog parenting
     readonly property alias overlayRootItem: overlayRoot
 
-    width: imageWriter.isEmbeddedMode() ? -1 : Style.scaled(680)
-    height: imageWriter.isEmbeddedMode() ? -1 : Style.scaled(580)
-    minimumWidth: imageWriter.isEmbeddedMode() ? -1 : Style.scaled(680)
-    minimumHeight: imageWriter.isEmbeddedMode() ? -1 : Style.scaled(560)
+    width: imageWriter.isEmbeddedMode() ? -1 : Style.scaled(880)
+    height: imageWriter.isEmbeddedMode() ? -1 : Style.scaled(640)
+    minimumWidth: imageWriter.isEmbeddedMode() ? -1 : Style.scaled(760)
+    minimumHeight: imageWriter.isEmbeddedMode() ? -1 : Style.scaled(580)
+
+    // The stock Material controls (text fields, combo boxes, check boxes,
+    // menus, busy indicators) take their colours from here, so they follow
+    // the light / dark theme together with everything styled through Style.
+    color: Style.bg
+    Material.theme: Style.dark ? Material.Dark : Material.Light
+    Material.accent: Style.accent
+    Material.primary: Style.accent
+    Material.background: Style.surface
+    Material.foreground: Style.text
 
     // Track custom repo host for title display
     property string customRepoHost: imageWriter.customRepoHost()
@@ -147,7 +157,7 @@ ApplicationWindow {
             text: errorDialog.titleText
             font.pointSize: Style.fontSizeHeading
             font.family: Style.fontFamilyBold
-            font.bold: true
+            font.weight: Style.fontWeightSemiBold
             color: Style.formLabelColor
             Layout.fillWidth: true
             Accessible.role: Accessible.Heading
@@ -221,7 +231,7 @@ ApplicationWindow {
             text: qsTr("Storage device removed")
             font.pointSize: Style.fontSizeHeading
             font.family: Style.fontFamilyBold
-            font.bold: true
+            font.weight: Style.fontWeightSemiBold
             color: Style.formLabelColor
             Layout.fillWidth: true
             Accessible.role: Accessible.Heading
@@ -294,7 +304,7 @@ ApplicationWindow {
             text: qsTr("Are you sure you want to quit?")
             font.pointSize: Style.fontSizeHeading
             font.family: Style.fontFamilyBold
-            font.bold: true
+            font.weight: Style.fontWeightSemiBold
             color: Style.formLabelColor
             Layout.fillWidth: true
             Accessible.role: Accessible.Heading
@@ -409,7 +419,7 @@ ApplicationWindow {
             text: qsTr("Insufficient Permissions")
             font.pointSize: Style.fontSizeHeading
             font.family: Style.fontFamilyBold
-            font.bold: true
+            font.weight: Style.fontWeightSemiBold
             color: Style.formLabelErrorColor
             Layout.fillWidth: true
             Accessible.role: Accessible.Heading

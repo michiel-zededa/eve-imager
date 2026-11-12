@@ -16,261 +16,177 @@ WizardStepBase {
     required property ImageWriter imageWriter
     required property var wizardContainer
     
-    title: qsTr("Write complete!")
+    title: qsTr("Write complete")
     showBackButton: false
     showNextButton: false
     readonly property bool autoEjectEnabled: imageWriter.getBoolSetting("eject")
-    // Use snapshot of customization flags captured when write completed
-    // This preserves the state even after token/flags are cleared for security
-    readonly property bool anyCustomizationsApplied: (
-        wizardContainer.completionSnapshot.customizationSupported && (
-            wizardContainer.completionSnapshot.hostnameConfigured ||
-            wizardContainer.completionSnapshot.localeConfigured ||
-            wizardContainer.completionSnapshot.userConfigured ||
-            wizardContainer.completionSnapshot.wifiConfigured ||
-            wizardContainer.completionSnapshot.sshEnabled ||
-            wizardContainer.completionSnapshot.piConnectEnabled ||
-            wizardContainer.completionSnapshot.ifI2cEnabled ||
-            wizardContainer.completionSnapshot.ifSpiEnabled ||
-            wizardContainer.completionSnapshot.if1WireEnabled ||
-            wizardContainer.completionSnapshot.ifSerial !== ""  && wizardContainer.completionSnapshot.ifSerial !== "Disabled" ||
-            wizardContainer.completionSnapshot.featUsbGadgetEnabled
-        )
-    )
-    
+
+    component SummaryLabel: Text {
+        font.pointSize: Style.fontSizeFormLabel
+        font.family: Style.fontFamily
+        color: Style.muted
+        Layout.alignment: Qt.AlignTop
+        Accessible.role: Accessible.StaticText
+        Accessible.focusable: root.imageWriter ? root.imageWriter.isScreenReaderActive() : false
+        focusPolicy: (root.imageWriter && root.imageWriter.isScreenReaderActive()) ? Qt.TabFocus : Qt.NoFocus
+        activeFocusOnTab: root.imageWriter ? root.imageWriter.isScreenReaderActive() : false
+    }
+
+    component SummaryValue: Text {
+        font.pointSize: Style.fontSizeFormLabel
+        font.family: Style.fontFamily
+        color: Style.text
+        Layout.fillWidth: true
+        wrapMode: Text.WordWrap
+        maximumLineCount: 3
+        elide: Text.ElideRight
+        Accessible.ignored: true   // Read as part of the label
+    }
+
     // Content
     content: [
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: Style.cardPadding
-        spacing: Style.spacingLarge
-        
-        // What was configured (de-chromed)
-        ColumnLayout {
+        spacing: Style.spacingSmallPlus
+
+        // Result: what to do with the drive now
+        Rectangle {
             Layout.fillWidth: true
-            spacing: Style.spacingMedium
-            
-            Text {
-                id: choicesHeading
-                text: qsTr("Your choices:")
-                font.pointSize: Style.fontSizeHeading
-                font.family: Style.fontFamilyBold
-                font.bold: true
-                color: Style.formLabelColor
-                Layout.fillWidth: true
-                Accessible.role: Accessible.Heading
-                Accessible.name: text
-                Accessible.focusable: root.imageWriter ? root.imageWriter.isScreenReaderActive() : false
-                focusPolicy: (root.imageWriter && root.imageWriter.isScreenReaderActive()) ? Qt.TabFocus : Qt.NoFocus
-                activeFocusOnTab: root.imageWriter ? root.imageWriter.isScreenReaderActive() : false
+            color: Style.okBg
+            border.color: Style.okBorder
+            border.width: 1
+            radius: Style.sectionBorderRadius
+            implicitHeight: resultRow.implicitHeight + Style.cardPadding * 2
+
+            RowLayout {
+                id: resultRow
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.margins: Style.cardPadding
+                spacing: Style.spacingSmallPlus
+
+                ImIcon {
+                    name: "check-circle"
+                    color: Style.ok
+                    size: Style.scaled(28)
+                    Layout.alignment: Qt.AlignTop
+                }
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: Style.spacingXXSmall
+
+                    Text {
+                        id: choicesHeading
+                        text: qsTr("The installer drive is ready")
+                        font.pointSize: Style.fontSizeHeading
+                        font.family: Style.fontFamily
+                        font.weight: Style.fontWeightSemiBold
+                        color: Style.ok
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        Accessible.role: Accessible.Heading
+                        Accessible.name: text
+                        Accessible.focusable: root.imageWriter ? root.imageWriter.isScreenReaderActive() : false
+                        focusPolicy: (root.imageWriter && root.imageWriter.isScreenReaderActive()) ? Qt.TabFocus : Qt.NoFocus
+                        activeFocusOnTab: root.imageWriter ? root.imageWriter.isScreenReaderActive() : false
+                    }
+
+                    Text {
+                        id: ejectInstruction
+                        text: root.autoEjectEnabled ? qsTr("The storage device was ejected automatically. You can now remove it safely.") : qsTr("Please eject the storage device before removing it from your computer.")
+                        font.pointSize: Style.fontSizeDescription
+                        font.family: Style.fontFamily
+                        color: Style.text
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        Accessible.role: Accessible.StaticText
+                        Accessible.name: text
+                        Accessible.focusable: root.imageWriter ? root.imageWriter.isScreenReaderActive() : false
+                        focusPolicy: (root.imageWriter && root.imageWriter.isScreenReaderActive()) ? Qt.TabFocus : Qt.NoFocus
+                        activeFocusOnTab: root.imageWriter ? root.imageWriter.isScreenReaderActive() : false
+                    }
+                }
             }
-            
+        }
+
+        // What was written
+        ImCard {
+            Layout.fillWidth: true
+            padding: 0
+            spacing: 0
+
+            Text {
+                text: qsTr("Written")
+                font.family: Style.fontFamily
+                font.pointSize: Style.fontSizeCaption
+                font.weight: Style.fontWeightSemiBold
+                font.letterSpacing: 1.1
+                font.capitalization: Font.AllUppercase
+                color: Style.muted
+                Layout.leftMargin: Style.cardPadding
+                Layout.topMargin: Style.spacingSmallPlus
+                Layout.bottomMargin: Style.spacingSmallPlus
+                Accessible.ignored: true
+            }
+
+            Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Style.border }
+
             GridLayout {
                 id: choicesGrid
                 Layout.fillWidth: true
+                Layout.margins: Style.cardPadding
+                Layout.topMargin: Style.spacingSmallPlus
+                Layout.bottomMargin: Style.spacingSmallPlus
                 columns: 2
                 columnSpacing: Style.formColumnSpacing
-                rowSpacing: Style.spacingSmall
-                
-                Text {
-                    id: deviceLabel
-                    text: CommonStrings.device
-                    font.pointSize: Style.fontSizeDescription
-                    font.family: Style.fontFamily
-                    color: Style.formLabelColor
-                    Accessible.role: Accessible.StaticText
-                    Accessible.name: text + ": " + (wizardContainer.selectedDeviceName || CommonStrings.noDeviceSelected)
-                    Accessible.focusable: root.imageWriter ? root.imageWriter.isScreenReaderActive() : false
-                    focusPolicy: (root.imageWriter && root.imageWriter.isScreenReaderActive()) ? Qt.TabFocus : Qt.NoFocus
-                    activeFocusOnTab: root.imageWriter ? root.imageWriter.isScreenReaderActive() : false
-                }
-                Text {
-                    id: deviceValue
-                    text: wizardContainer.selectedDeviceName || CommonStrings.noDeviceSelected
-                    font.pointSize: Style.fontSizeDescription
-                    font.family: Style.fontFamilyBold
-                    font.bold: true
-                    color: Style.formLabelColor
-                    Layout.fillWidth: true
-                    elide: Text.ElideRight
-                    Accessible.ignored: true
+                rowSpacing: Style.spacingTiny
 
-                    ToolTip.text: text
-                    ToolTip.visible: truncated && deviceValueMouseArea.containsMouse
-                    ToolTip.delay: 500
-                    MouseArea {
-                        id: deviceValueMouseArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        acceptedButtons: Qt.NoButton
-                    }
-                }
-                
-                Text {
+                SummaryLabel {
                     id: osLabel
-                    text: qsTr("Operating system:")
-                    font.pointSize: Style.fontSizeDescription
-                    font.family: Style.fontFamily
-                    color: Style.formLabelColor
-                    Accessible.role: Accessible.StaticText
-                    Accessible.name: text + " " + (wizardContainer.selectedOsName || CommonStrings.noImageSelected)
-                    Accessible.focusable: root.imageWriter ? root.imageWriter.isScreenReaderActive() : false
-                    focusPolicy: (root.imageWriter && root.imageWriter.isScreenReaderActive()) ? Qt.TabFocus : Qt.NoFocus
-                    activeFocusOnTab: root.imageWriter ? root.imageWriter.isScreenReaderActive() : false
+                    text: qsTr("Image")
+                    Layout.preferredWidth: Style.scaled(110)
+                    Accessible.name: text + ": " + osValue.text
                 }
-                Text {
+                SummaryValue {
                     id: osValue
                     text: wizardContainer.selectedOsName || CommonStrings.noImageSelected
-                    font.pointSize: Style.fontSizeDescription
-                    font.family: Style.fontFamilyBold
-                    font.bold: true
-                    color: Style.formLabelColor
-                    Layout.fillWidth: true
-                    elide: Text.ElideRight
-                    Accessible.ignored: true
+                }
 
-                    ToolTip.text: text
-                    ToolTip.visible: truncated && osValueMouseArea.containsMouse
-                    ToolTip.delay: 500
-                    MouseArea {
-                        id: osValueMouseArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        acceptedButtons: Qt.NoButton
-                    }
-                }
-                
-                Text {
+                SummaryLabel {
                     id: storageLabel
-                    text: qsTr("Storage:")
-                    font.pointSize: Style.fontSizeDescription
-                    font.family: Style.fontFamily
-                    color: Style.formLabelColor
-                    Accessible.role: Accessible.StaticText
-                    Accessible.name: text + " " + (wizardContainer.selectedStorageName || CommonStrings.noStorageSelected)
-                    Accessible.focusable: root.imageWriter ? root.imageWriter.isScreenReaderActive() : false
-                    focusPolicy: (root.imageWriter && root.imageWriter.isScreenReaderActive()) ? Qt.TabFocus : Qt.NoFocus
-                    activeFocusOnTab: root.imageWriter ? root.imageWriter.isScreenReaderActive() : false
+                    text: qsTr("Storage")
+                    Accessible.name: text + ": " + storageValue.text
                 }
-                Text {
+                SummaryValue {
                     id: storageValue
                     text: wizardContainer.selectedStorageName || CommonStrings.noStorageSelected
-                    font.pointSize: Style.fontSizeDescription
-                    font.family: Style.fontFamilyBold
-                    font.bold: true
-                    color: Style.formLabelColor
-                    Layout.fillWidth: true
-                    elide: Text.ElideRight
-                    Accessible.ignored: true
+                }
 
-                    ToolTip.text: text
-                    ToolTip.visible: truncated && storageValueMouseArea.containsMouse
-                    ToolTip.delay: 500
-                    MouseArea {
-                        id: storageValueMouseArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        acceptedButtons: Qt.NoButton
-                    }
+                SummaryLabel {
+                    id: configLabel
+                    text: qsTr("Configuration")
+                    Accessible.name: text + ": " + configValue.text
+                }
+                SummaryValue {
+                    id: configValue
+                    text: wizardContainer.eveConfigSummary()
                 }
             }
-            
-            // Customization summary
-            Text {
-                id: customizationsHeading
-                text: qsTr("Customisations applied:")
-                font.pointSize: Style.fontSizeFormLabel
-                font.family: Style.fontFamilyBold
-                font.bold: true
-                color: Style.formLabelColor
-                Layout.fillWidth: true
-                Layout.topMargin: Style.spacingSmall
-                visible: root.anyCustomizationsApplied
-                Accessible.role: Accessible.Heading
-                Accessible.name: text
-                Accessible.focusable: root.imageWriter ? root.imageWriter.isScreenReaderActive() : false
-                focusPolicy: (root.imageWriter && root.imageWriter.isScreenReaderActive()) ? Qt.TabFocus : Qt.NoFocus
-                activeFocusOnTab: root.imageWriter ? root.imageWriter.isScreenReaderActive() : false
-            }
-            
-            ScrollView {
-                id: customizationScrollView
-                Layout.fillWidth: true
-                Layout.maximumHeight: Math.round(root.height * 0.4)
-                clip: true
-                visible: root.anyCustomizationsApplied
-                activeFocusOnTab: true
-                focusPolicy: Qt.TabFocus
-                Accessible.role: Accessible.List
-                Accessible.name: {
-                    // Build a list of visible customizations to announce using snapshot
-                    var items = []
-                    var snapshot = wizardContainer.completionSnapshot
-                    if (snapshot.hostnameConfigured) items.push(CommonStrings.hostnameConfigured)
-                    if (snapshot.localeConfigured) items.push(CommonStrings.localeConfigured)
-                    if (snapshot.userConfigured) items.push(CommonStrings.userAccountConfigured)
-                    if (snapshot.wifiConfigured) items.push(CommonStrings.wifiConfigured)
-                    if (snapshot.sshEnabled) items.push(CommonStrings.sshEnabled)
-                    if (snapshot.piConnectEnabled) items.push(CommonStrings.piConnectEnabled)
-                    if (snapshot.featUsbGadgetEnabled) items.push(CommonStrings.usbGadgetEnabled)
-                    if (snapshot.ifI2cEnabled) items.push(CommonStrings.i2cEnabled)
-                    if (snapshot.ifSpiEnabled) items.push(CommonStrings.spiEnabled)
-                    if (snapshot.if1WireEnabled) items.push(CommonStrings.onewireEnabled)
-                    if (snapshot.ifSerial !== "" && snapshot.ifSerial !== "Disabled") items.push(CommonStrings.serialConfigured)
-                    
-                    return items.length + " " + (items.length === 1 ? qsTr("customization") : qsTr("customizations")) + ": " + items.join(", ")
-                }
-                Flickable {
-                    contentWidth: parent.width
-                    contentHeight: customizationColumn.height
-                    
-                    Keys.onUpPressed: {
-                        if (contentY > 0) {
-                            contentY = Math.max(0, contentY - 20)
-                        }
-                    }
-                    Keys.onDownPressed: {
-                        var maxY = Math.max(0, contentHeight - height)
-                        if (contentY < maxY) {
-                            contentY = Math.min(maxY, contentY + 20)
-                        }
-                    }
-                    
-                    Column {
-                        id: customizationColumn
-                        width: parent.width
-                        property var snapshot: wizardContainer.completionSnapshot
-                        Text { text: "✓ " + CommonStrings.hostnameConfigured; font.pointSize: Style.fontSizeDescription; font.family: Style.fontFamily; color: Style.formLabelColor; visible: customizationColumn.snapshot.hostnameConfigured }
-                        Text { text: "✓ " + CommonStrings.localeConfigured; font.pointSize: Style.fontSizeDescription; font.family: Style.fontFamily; color: Style.formLabelColor; visible: customizationColumn.snapshot.localeConfigured }
-                        Text { text: "✓ " + CommonStrings.userAccountConfigured; font.pointSize: Style.fontSizeDescription; font.family: Style.fontFamily; color: Style.formLabelColor; visible: customizationColumn.snapshot.userConfigured }
-                        Text { text: "✓ " + CommonStrings.wifiConfigured; font.pointSize: Style.fontSizeDescription; font.family: Style.fontFamily; color: Style.formLabelColor; visible: customizationColumn.snapshot.wifiConfigured }
-                        Text { text: "✓ " + CommonStrings.sshEnabled; font.pointSize: Style.fontSizeDescription; font.family: Style.fontFamily; color: Style.formLabelColor; visible: customizationColumn.snapshot.sshEnabled }
-                        Text { text: "✓ " + CommonStrings.piConnectEnabled; font.pointSize: Style.fontSizeDescription; font.family: Style.fontFamily; color: Style.formLabelColor; visible: customizationColumn.snapshot.piConnectEnabled }
-                        Text { text: "✓ " + CommonStrings.usbGadgetEnabled; font.pointSize: Style.fontSizeDescription; font.family: Style.fontFamily; color: Style.formLabelColor; visible: customizationColumn.snapshot.featUsbGadgetEnabled }
-                        Text { text: "✓ " + CommonStrings.i2cEnabled; font.pointSize: Style.fontSizeDescription; font.family: Style.fontFamily; color: Style.formLabelColor; visible: customizationColumn.snapshot.ifI2cEnabled }
-                        Text { text: "✓ " + CommonStrings.spiEnabled; font.pointSize: Style.fontSizeDescription; font.family: Style.fontFamily; color: Style.formLabelColor; visible: customizationColumn.snapshot.ifSpiEnabled }
-                        Text { text: "✓ " + CommonStrings.onewireEnabled; font.pointSize: Style.fontSizeDescription; font.family: Style.fontFamily; color: Style.formLabelColor; visible: customizationColumn.snapshot.if1WireEnabled }
-                        Text { text: "✓ " + CommonStrings.serialConfigured; font.pointSize: Style.fontSizeDescription; font.family: Style.fontFamily; color: Style.formLabelColor; visible: customizationColumn.snapshot.ifSerial !== "" && customizationColumn.snapshot.ifSerial !== "Disabled" }
-                    }
-                }
-                ScrollBar.vertical: ScrollBar { policy: contentItem.implicitHeight > height ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff; width: Style.scrollBarWidth }
-            }
-            Text {
-                id: ejectInstruction
-                text: root.autoEjectEnabled ? qsTr("The storage device was ejected automatically. You can now remove it safely.") : qsTr("Please eject the storage device before removing it from your computer.")
-                font.pointSize: Style.fontSizeDescription
-                font.family: Style.fontFamily
-                color: Style.textDescriptionColor
-                Layout.fillWidth: true
-                horizontalAlignment: Text.AlignHCenter
-                wrapMode: Text.WordWrap
-                Accessible.role: Accessible.StaticText
-                Accessible.name: text
-                Accessible.focusable: root.imageWriter ? root.imageWriter.isScreenReaderActive() : false
-                focusPolicy: (root.imageWriter && root.imageWriter.isScreenReaderActive()) ? Qt.TabFocus : Qt.NoFocus
-                activeFocusOnTab: root.imageWriter ? root.imageWriter.isScreenReaderActive() : false
-            }
-        }        
+        }
+
+        // Next step for the person holding the drive
+        Text {
+            Layout.fillWidth: true
+            text: qsTr("Boot the target device from this drive to install EVE-OS.")
+            font.pointSize: Style.fontSizeDescription
+            font.family: Style.fontFamily
+            color: Style.muted
+            wrapMode: Text.WordWrap
+        }
+
+        Item { Layout.fillHeight: true }
     }
     ]
     
@@ -282,7 +198,7 @@ WizardStepBase {
         
         ImButton {
             id: writeAnotherButton
-            text: qsTr("Write Another")
+            text: qsTr("Write another")
             accessibleDescription: qsTr("Return to storage selection to write the same image to another storage device")
             enabled: true
             activeFocusOnTab: true
@@ -315,31 +231,13 @@ WizardStepBase {
         }
     ]
     
-    // Focus management - rebuild when customization visibility changes
-    onAnyCustomizationsAppliedChanged: rebuildFocusOrder()
-    
     Component.onCompleted: {
-        // Register choices section as first focus group
+        // Register the result and the summary as focus groups
         registerFocusGroup("choices", function() {
-            return [choicesHeading, deviceLabel, osLabel, storageLabel]
+            return [choicesHeading, ejectInstruction, osLabel, storageLabel, configLabel]
         }, 0)
-        
-        // Register customizations section as second focus group
-        registerFocusGroup("customizations", function() {
-            var items = []
-            if (customizationScrollView.visible) {
-                items.push(customizationsHeading)
-                items.push(customizationScrollView)
-            }
-            return items
-        }, 1)
-        
-        // Register eject instruction as third focus group
-        registerFocusGroup("eject", function() {
-            return [ejectInstruction]
-        }, 2)
-        
-        // Register custom buttons as fourth focus group
+
+        // Register custom buttons as the last focus group
         registerFocusGroup("buttons", function() {
             return [writeAnotherButton, finishButton]
         }, 3)

@@ -47,6 +47,8 @@ FocusScope {
     property string backButtonText: CommonStrings.back
     property string skipButtonText: qsTr("Skip customisation")
     property bool nextButtonEnabled: true
+    // Draw the next button as a destructive action (outlined red)
+    property bool nextButtonDanger: false
     property bool backButtonEnabled: true
     property bool skipButtonEnabled: true
     property string nextButtonAccessibleDescription: ""
@@ -98,7 +100,8 @@ FocusScope {
                 text: root.title
                 font.pointSize: Style.fontSizeTitle
                 font.family: Style.fontFamilyBold
-                font.bold: true
+                font.weight: Style.fontWeightSemiBold
+                font.letterSpacing: -0.3
                 color: Style.formLabelColor
                 Layout.fillWidth: true
                 visible: root.title && root.title.length > 0
@@ -134,6 +137,16 @@ FocusScope {
             Layout.fillHeight: true
         }
         
+        // Hairline above the buttons, edge to edge
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.leftMargin: -Style.stepContentMargins
+            Layout.rightMargin: -Style.stepContentMargins
+            Layout.topMargin: -Style.spacingXSmall
+            implicitHeight: 1
+            color: Style.border
+        }
+
         // Navigation buttons and network info
         RowLayout {
             id: buttonRow
@@ -202,6 +215,7 @@ FocusScope {
                 text: root.nextButtonText
                 visible: customButtonArea.children.length === 0 && root.showNextButton
                 enabled: root.nextButtonEnabled
+                danger: root.nextButtonDanger
                 accessibleDescription: root.nextButtonAccessibleDescription
                 Layout.minimumWidth: Style.buttonWidthMinimum
                 Layout.maximumWidth: Style.buttonWidthMinimum * 1.5  // Allow some growth but cap it

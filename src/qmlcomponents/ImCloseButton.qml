@@ -27,7 +27,7 @@ Text {
 
     font.family: Style.fontFamily
     font.pointSize: Style.fontSizeSm
-    font.bold: true
+    font.weight: Style.fontWeightSemiBold
     
     // Accessibility properties
     Accessible.role: Accessible.Button

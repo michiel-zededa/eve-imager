@@ -119,7 +119,7 @@ BaseDialog {
         id: driveNameText
         font.family: Style.fontFamily
         font.pointSize: Style.fontSizeSm
-        font.bold: true
+        font.weight: Style.fontWeightSemiBold
         color: Style.textDescriptionColor
         text: root.driveName
         // Make this text focusable when screen reader is active

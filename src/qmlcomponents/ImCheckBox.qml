@@ -50,6 +50,29 @@ CheckBox {
         width: control.availableWidth  // Constrain width so text wraps
     }
     
+    // Rounded box that fills with the accent colour when checked
+    indicator: Rectangle {
+        implicitWidth: Style.scaled(18)
+        implicitHeight: Style.scaled(18)
+        x: control.leftPadding
+        y: control.topPadding + (control.availableHeight - height) / 2
+        radius: 5
+        color: control.checked ? Style.formControlActiveColor
+             : control.enabled ? Style.surface : Style.surface2
+        border.width: control.checked ? 0 : 1.5
+        border.color: control.hovered && control.enabled ? Style.muted : Style.formControlBorderColor
+        opacity: control.enabled ? 1.0 : 0.6
+
+        ImIcon {
+            anchors.centerIn: parent
+            name: "check"
+            size: parent.width - 4
+            strokeWidth: 3
+            color: Style.accentContrast
+            visible: control.checked
+        }
+    }
+
     // Custom square indicator for embedded mode to avoid rendering artifacts
     Component.onCompleted: {
         if (control.imageWriter && control.imageWriter.isEmbeddedMode()) {
@@ -75,7 +98,7 @@ CheckBox {
                 text: "✓"
                 color: Style.mainBackgroundColor
                 font.pointSize: Style.fontSizeSm
-                font.bold: true
+                font.weight: Style.fontWeightSemiBold
                 visible: control.checked
             }
         }

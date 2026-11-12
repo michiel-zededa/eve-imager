@@ -5,15 +5,52 @@
 
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Templates as T
 import RpiImager
 
 pragma ComponentBehavior: Bound
 
-TextField {
+// Built on the unstyled template, so the field looks the same on every
+// platform: a bordered, rounded box whose border turns accent on focus.
+T.TextField {
     id: root
 
     font.family: Style.fontFamily
     font.pointSize: Style.fontSizeInput
+
+    implicitWidth: Style.scaled(200)
+    implicitHeight: Style.scaled(40)
+    leftPadding: Style.scaled(12)
+    rightPadding: Style.scaled(12)
+    topPadding: 0
+    bottomPadding: 0
+    verticalAlignment: TextInput.AlignVCenter
+
+    color: enabled ? Style.text : Style.disabledText
+    selectionColor: Style.accent
+    selectedTextColor: Style.accentContrast
+    placeholderTextColor: Style.disabledText
+
+    background: Rectangle {
+        color: root.enabled ? Style.surface : Style.surface2
+        radius: Style.controlBorderRadius
+        border.width: root.activeFocus ? 2 : 1
+        border.color: root.activeFocus ? Style.accent : Style.border
+    }
+
+    // Placeholder, shown while the field is empty
+    Text {
+        anchors.fill: parent
+        anchors.leftMargin: root.leftPadding
+        anchors.rightMargin: root.rightPadding
+        verticalAlignment: Text.AlignVCenter
+        text: root.placeholderText
+        font: root.font
+        color: root.placeholderTextColor
+        elide: Text.ElideRight
+        visible: root.length === 0 && root.preeditText.length === 0
+        Accessible.ignored: true
+    }
 
     // Sensible defaults to ensure consistent behavior across the app
     activeFocusOnPress: true

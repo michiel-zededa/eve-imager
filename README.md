@@ -1,14 +1,16 @@
 # EVE Imager
 
-A graphical tool for writing [LF Edge EVE OS](https://github.com/lf-edge/eve) installer images to USB drives. Built on top of [Raspberry Pi Imager](https://github.com/raspberrypi/rpi-imager).
+A graphical tool for writing [LF Edge EVE-OS](https://github.com/lf-edge/eve) installer images to USB drives. Built on top of [Raspberry Pi Imager](https://github.com/raspberrypi/rpi-imager).
 
-EVE Imager downloads EVE OS releases directly from GitHub, lets you configure device settings (controller URL, network, WiFi), writes the image to a USB drive, and verifies the result — all in one guided workflow.
+EVE Imager downloads EVE-OS releases directly from GitHub, lets you configure device settings (controller URL, network, WiFi), writes the image to a USB drive, and verifies the result — all in one guided workflow.
+
+![EVE Imager: selecting an EVE-OS release](doc/screenshots/version.png)
 
 ---
 
 ## Features
 
-- **Live release browser** — paginates all EVE OS releases from [lf-edge/eve GitHub releases](https://github.com/lf-edge/eve/releases), showing the newest patch release of each LTS line, newest line first (17.0.x, 16.0.x, 14.5.x, …)
+- **Live release browser** — paginates all EVE-OS releases from [lf-edge/eve GitHub releases](https://github.com/lf-edge/eve/releases), showing the newest patch release of each LTS line, newest line first (17.0.x, 16.0.x, 14.5.x, …)
 - **LTS filter** — shows only releases tagged `X.Y.Z-lts`, and of each LTS line (`X.Y`) only the newest patch; if that newest patch was published without images for an architecture (e.g. arm64) that an older patch of the same line still has, the older patch is listed too; use the _Use local image file_ tab for non-LTS builds
 - **Cascading selection** — choose Version → Architecture → Hypervisor → Platform; only combinations that actually have installer assets are shown
 - **Multi-format support** — handles `.installer.raw`, `.installer.raw.zst` (zstd-compressed), `.installer.img` (gzip-compressed, used by older EVE ≤12.x releases), and `.installer.iso`; compressed formats are decompressed on the fly while writing; when a release offers both `.installer.raw` and `.installer.raw.zst`, the smaller `.raw.zst` download is used; ISO images skip the config customization step
@@ -20,15 +22,25 @@ EVE Imager downloads EVE OS releases directly from GitHub, lets you configure de
   - WiFi (SSID and WPA2 password)
   - Target install disk and separate `/persist` disk
   - Auto-reboot after installation
-- **Local image support** — bypass the GitHub release browser and write a locally downloaded `.raw` file instead
-- **Write + verify** — streams the download directly to the USB device and verifies the written data afterwards
+- **Local image support** — bypass the GitHub release browser and write a locally downloaded `.raw` or `.iso` file instead
+- **Write + verify** — streams the download directly to the USB device and verifies the written data afterwards; the Write page shows the percentage, the amount written and the current stage
+- **Write again** — after a finished, cancelled or failed write you can write the same image to another drive, or go back and change the selection, without restarting the app
 - **5-step wizard** — Version → Storage → Configuration → Write → Done
+- **Light and dark appearance** — follows the system setting; the button at the top right switches between system, light and dark, and the choice is remembered
+- **App options** — play a sound when finished, eject the drive when finished, disable the confirmation warnings
 
 ---
 
 ## Screenshots
 
-> _Screenshots coming soon_
+| | |
+|---|---|
+| **1. Version** — pick a release, or a local image file | **2. Storage** — drives that are too small or read-only cannot be selected |
+| ![Version step](doc/screenshots/version.png) | ![Storage step](doc/screenshots/storage.png) |
+| **3. Configuration** — optional controller, network, WiFi and install settings | **4. Write** — progress, amount written and stage |
+| ![Configuration step](doc/screenshots/configuration.png) | ![Write step](doc/screenshots/write.png) |
+| **5. Done** | **Dark appearance** |
+| ![Done step](doc/screenshots/done.png) | ![Write step, dark appearance](doc/screenshots/write-dark.png) |
 
 ---
 
@@ -71,7 +83,7 @@ To build from source instead, follow the platform sections below.
 
 ### macOS (build from source)
 
-Requirements: Xcode command-line tools, CMake ≥ 3.16, Qt 6.x (via Homebrew: `brew install qt`)
+Requirements: Xcode command-line tools, CMake ≥ 3.22, Qt 6.9 or newer (via Homebrew: `brew install qt`)
 
 ```bash
 git clone https://github.com/michiel-zededa/eve-imager.git
@@ -97,39 +109,45 @@ The local self-signed certificate is machine-specific and cannot be bundled with
 
 ### Linux (build from source)
 
+Requirements: CMake ≥ 3.22 and **Qt 6.9 or newer**. The Qt packages of most distributions are older than that, so install Qt with the [Qt Online Installer](https://www.qt.io/download-qt-installer) or [aqtinstall](https://github.com/miurahr/aqtinstall) and point CMake at it. The other libraries (curl, libarchive, zstd, xz, zlib) are downloaded and built as part of the build.
+
 ```bash
-sudo apt install cmake qt6-base-dev qt6-declarative-dev \
-    libcurl4-openssl-dev libssl-dev libudev-dev
+sudo apt install build-essential cmake ninja-build git pkg-config \
+    libgnutls28-dev libudev-dev libdbus-1-dev \
+    libgl1-mesa-dev libxkbcommon-dev libvulkan-dev
 git clone https://github.com/michiel-zededa/eve-imager.git
 cd eve-imager
-cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake -S src -B build -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_PREFIX_PATH=/path/to/Qt/6.9.1/gcc_64
 cmake --build build
-sudo ./build/eve-imager   # root required for raw device access
+./build/eve-imager   # asks for elevated rights (pkexec) when it writes to a device
 ```
+
+The release AppImages are built with `./create-appimage.sh --qt-root=/path/to/Qt/6.9.1/gcc_64`.
 
 ### Windows
 
-Build with CMake + Qt 6 via the Qt Online Installer. Run as Administrator (raw device write access requires elevation).
+Build with CMake + Qt 6.9 or newer (MinGW kit) via the Qt Online Installer: `cmake -S src -B build`, then `cmake --build build`. Run as Administrator (raw device write access requires elevation).
 
 ---
 
 ## Usage
 
-1. **Version** — Select an EVE OS version from the dropdown (loaded live from GitHub, newest first). Only LTS releases are shown (tags ending in `-lts`, e.g. `17.0.1-lts`), one entry per LTS line. Choose architecture, hypervisor, and platform. Or switch to the _Use local image file_ tab to pick a `.raw` or `.iso` file you already have (useful for non-LTS builds).
+1. **Version** — Select an EVE-OS version from the dropdown (loaded live from GitHub, newest first). Only LTS releases are shown (tags ending in `-lts`, e.g. `17.0.1-lts`), one entry per LTS line. Choose architecture, hypervisor, and platform; the page then shows the file that will be downloaded and how large a drive it needs. Or switch to the _Use local image file_ tab to pick a `.raw` or `.iso` file you already have (useful for non-LTS builds).
 
-2. **Storage** — Select the target USB drive. Double-check the device name and size before continuing.
+2. **Storage** — Select the target USB drive. Drives that are too small for the image, or read-only, are marked and cannot be selected. System drives are hidden unless you untick _Exclude system drives_. Double-check the device name and size before continuing: everything on the drive will be erased.
 
 3. **Configuration** _(optional, RAW images only)_ — Configure any combination of the settings below. Leave everything blank to write a plain image and configure the device through the controller later. This step is skipped automatically for ISO images.
 
-4. **Write** — Review the summary and click **Write**. EVE-Imager downloads the image (if not using a local file), streams it to the USB drive, and verifies the result. A yellow notice is shown when writing an ISO to remind you that pre-configuration is not available.
+4. **Write** — Review the summary (image, storage, configuration) and click **Write**, then confirm that the drive may be erased. EVE Imager downloads the image (if not using a local file), streams it to the USB drive, and verifies the result. **Cancel write** stops the write and returns to the summary. A notice is shown when writing an ISO to remind you that pre-configuration is not available.
 
-5. **Done** — Eject the USB drive and boot your target device from it.
+5. **Done** — The drive is ejected automatically (unless you turned that off under _App options_). Boot your target device from it, or choose **Write another** to write the same image to another drive.
 
 ---
 
-## Supported EVE OS images
+## Supported EVE-OS images
 
-EVE OS publishes installer images for:
+EVE-OS publishes installer images for:
 
 | Architecture | Hypervisor | Platform examples |
 |---|---|---|
@@ -146,7 +164,7 @@ EVE OS publishes installer images for:
 
 ## Configuration details
 
-When you fill in the Configuration step, EVE-Imager writes the following files to the `CONFIG` FAT partition on the USB drive before ejecting:
+When you fill in the Configuration step, EVE Imager writes the following files to the `CONFIG` FAT partition on the USB drive before ejecting:
 
 ### Controller
 
@@ -160,7 +178,7 @@ When you fill in the Configuration step, EVE-Imager writes the following files t
 |---|---|
 | `DevicePortConfig/override.json` | Network port configuration. Written when static IP, a proxy, or a WiFi network is configured; omitted for plain wired DHCP. Includes a `wlan0` port with WPA2 credentials when an SSID is provided. |
 
-The WiFi configuration uses EVE OS's native format: `WirelessTypeWifi = 2`, `WifiKeySchemeWpaPsk = 1`, `DhcpTypeClient = 4`, as defined in EVE's device model.
+The WiFi configuration uses EVE-OS's native format: `WirelessTypeWifi = 2`, `WifiKeySchemeWpaPsk = 1`, `DhcpTypeClient = 4`, as defined in EVE's device model.
 
 ### Installation (written to `grub.cfg`)
 
@@ -183,14 +201,22 @@ src/
 ├── devicewrapperfatpartition.*   # FAT12/16/32 partition read/write
 ├── imagewriter.{h,cpp}           # Core download + write engine
 ├── wizard/
-│   ├── WizardContainer.qml       # 5-step wizard shell + sidebar
+│   ├── WizardContainer.qml       # 5-step wizard shell: top bar + sidebar
 │   ├── EveVersionStep.qml        # Step 0: version / image selection
 │   ├── StorageSelectionStep.qml  # Step 1: USB drive picker
 │   ├── EveCustomizationStep.qml  # Step 2: controller + network config
 │   ├── WritingStep.qml           # Step 3: progress + write
 │   └── DoneStep.qml              # Step 4: completion
-└── Style.qml                     # ZEDEDA brand colours + layout constants
+├── qmlcomponents/                # Shared controls: buttons, cards, pills, banners, icons, fields
+├── icons/
+│   ├── app-icon.svg              # App icon artwork
+│   └── generate-app-icons.py     # Regenerates the .icns / .ico / .png files from it
+└── Style.qml                     # Colour tokens (light + dark), fonts, layout constants
 ```
+
+### Look and feel
+
+The UI follows the ZEDEDA product style: a light grey page, white cards with thin borders, one purple accent, status pills, the Inter typeface. All colours are tokens in `src/Style.qml`, each with a light and a dark value; the QML does not hard-code colours. Icons in the UI are vector paths in `src/qmlcomponents/ImIcon.qml` so that they take the theme colour.
 
 ### Building for development
 
@@ -221,7 +247,9 @@ The core write engine, FAT partition handling, and cross-platform build system a
 
 ## License
 
-Apache License 2.0 — see [LICENSE](./LICENSE) for details.
+Apache License 2.0 — see [license.txt](./license.txt) for details.
+
+The bundled Inter typeface is licensed under the SIL Open Font License 1.1 (`src/fonts/Inter-LICENSE.txt`); the UI icons are derived from [Lucide](https://lucide.dev) (ISC License).
 
 Copyright (C) 2020 Raspberry Pi Ltd (original)  
-Copyright (C) 2025 ZEDEDA, Inc. (EVE-Imager additions)
+Copyright (C) 2025-2026 ZEDEDA, Inc. (EVE Imager additions)

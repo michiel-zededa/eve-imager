@@ -65,7 +65,7 @@ BaseDialog {
         text: qsTr("Content Repository")
         font.pointSize: Style.fontSizeLargeHeading
         font.family: Style.fontFamilyBold
-        font.bold: true
+        font.weight: Style.fontWeightSemiBold
         color: Style.formLabelColor
         Layout.fillWidth: true
         horizontalAlignment: Text.AlignHCenter

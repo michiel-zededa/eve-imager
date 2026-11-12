@@ -7,6 +7,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
 import QtQuick.Layouts
+import RpiImager
 
 RadioButton {
     id: control
@@ -52,6 +53,29 @@ RadioButton {
         return null;
     }
     
+    // Ring that takes the accent colour, with a dot, when checked
+    indicator: Rectangle {
+        implicitWidth: Style.scaled(18)
+        implicitHeight: Style.scaled(18)
+        x: control.leftPadding
+        y: control.topPadding + (control.availableHeight - height) / 2
+        radius: width / 2
+        color: control.enabled ? Style.surface : Style.surface2
+        border.width: control.checked ? 2 : 1.5
+        border.color: control.checked ? Style.formControlActiveColor
+                    : control.hovered && control.enabled ? Style.muted : Style.formControlBorderColor
+        opacity: control.enabled ? 1.0 : 0.6
+
+        Rectangle {
+            anchors.centerIn: parent
+            width: parent.width - 10
+            height: width
+            radius: width / 2
+            color: Style.formControlActiveColor
+            visible: control.checked
+        }
+    }
+
     // Custom square indicator for embedded mode to avoid circular rendering artifacts
     Component.onCompleted: {
         if (control.imageWriter && control.imageWriter.isEmbeddedMode()) {

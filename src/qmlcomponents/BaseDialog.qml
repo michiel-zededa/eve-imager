@@ -53,7 +53,7 @@ Dialog {
     
     // Custom modal overlay background
     Overlay.modal: Rectangle {
-        color: Qt.rgba(0, 0, 0, 0.3)
+        color: Style.scrim
         Behavior on opacity {
             NumberAnimation {
                 duration: 150
@@ -66,7 +66,7 @@ Dialog {
     
     // Set the dialog background directly
     background: Rectangle {
-        color: Style.titleBackgroundColor
+        color: Style.surface
         radius: (root.imageWriter && root.imageWriter.isEmbeddedMode()) ? Style.sectionBorderRadiusEmbedded : Style.sectionBorderRadius
         border.color: Style.popupBorderColor
         border.width: Style.sectionBorderWidth

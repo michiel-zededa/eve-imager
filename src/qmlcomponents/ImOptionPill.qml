@@ -30,7 +30,7 @@ Item {
     readonly property font labelFont: Qt.font({
         family: Style.fontFamilyBold,
         pointSize: Style.fontSizeFormLabel,
-        bold: true
+        weight: Style.fontWeightMedium
     })
     
     // Export the natural/desired width for dialog sizing calculations
@@ -169,6 +169,29 @@ Item {
             checked: pill.checked
             activeFocusOnTab: true
             focusPolicy: Qt.TabFocus
+
+            // Pill-shaped track with a round knob; accent when on
+            indicator: Rectangle {
+                implicitWidth: Style.scaled(40)
+                implicitHeight: Style.scaled(22)
+                x: sw.leftPadding
+                y: sw.topPadding + (sw.availableHeight - height) / 2
+                radius: height / 2
+                color: sw.checked ? Style.formControlActiveColor : Style.formControlBorderColor
+                border.width: sw.activeFocus ? 2 : 0
+                border.color: Style.accentStrong
+                Behavior on color { ColorAnimation { duration: 120 } }
+
+                Rectangle {
+                    width: parent.height - 6
+                    height: width
+                    radius: width / 2
+                    y: 3
+                    x: sw.checked ? parent.width - width - 3 : 3
+                    color: "#ffffff"
+                    Behavior on x { NumberAnimation { duration: 120 } }
+                }
+            }
             
             // Access imageWriter from parent context
             property var imageWriter: {

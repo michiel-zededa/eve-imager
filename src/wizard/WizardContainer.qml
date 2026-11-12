@@ -43,10 +43,12 @@ Item {
     readonly property var stepNames: [
         qsTr("Version"),
         qsTr("Storage"),
-        qsTr("Configuration (optional)"),
+        qsTr("Configuration"),
         qsTr("Write"),
         qsTr("Done")
     ]
+    // ImIcon names, same order as stepNames
+    readonly property var stepIcons: ["layers", "drive", "sliders", "download", "check-circle"]
 
     // ── Write state (derived from C++ state machine) ─────────────────────
     readonly property bool isWriting: {
@@ -125,6 +127,22 @@ Item {
     })
     property bool eveConfigured: false
 
+    // What the Configuration step adds to the drive, in one line (Write and Done pages)
+    function eveConfigSummary() {
+        if (root.eveIsIsoImage)
+            return qsTr("Not applied (ISO image)")
+        var c = root.eveConfig
+        var parts = []
+        if (c.controllerUrl)                parts.push(qsTr("Controller %1").arg(c.controllerUrl))
+        if (c.networkMode === "static")     parts.push(c.staticIp ? qsTr("Static IP %1").arg(c.staticIp) : qsTr("Static IP"))
+        if (c.proxyUrl)                     parts.push(qsTr("HTTP proxy"))
+        if (c.wifiSsid)                     parts.push(qsTr("WiFi %1").arg(c.wifiSsid))
+        if (c.installDisk)                  parts.push(qsTr("Install disk %1").arg(c.installDisk))
+        if (c.persistDisk)                  parts.push(qsTr("/persist disk %1").arg(c.persistDisk))
+        if (c.rebootAfterInstall)           parts.push(qsTr("Reboot after install"))
+        return parts.length > 0 ? parts.join(" · ") : qsTr("None")
+    }
+
     // "Write another" mode — skip straight to WritingStep after storage re-selection
     property bool writeAnotherMode: false
 
@@ -156,6 +174,11 @@ Item {
 
     Component.onCompleted: {
         if (imageWriter) {
+            // Restore the appearance choice (light / dark / follow system)
+            var savedTheme = imageWriter.getStringSetting("theme")
+            if (savedTheme === "light" || savedTheme === "dark" || savedTheme === "system") {
+                Style.themeMode = savedTheme
+            }
             // Restore persisted sidebar width
             var savedWidth = imageWriter.getStringSetting("sidebarWidth")
             if (savedWidth) {
@@ -260,8 +283,101 @@ Item {
     }
 
     // ── Main layout ───────────────────────────────────────────────────────
-    RowLayout {
+    // Appearance: "system" follows the OS, "light" and "dark" force a theme.
+    function cycleThemeMode() {
+        var next = Style.themeMode === "system" ? "light" : Style.themeMode === "light" ? "dark" : "system"
+        Style.themeMode = next
+        if (imageWriter) imageWriter.setSetting("theme", next)
+    }
+
+    ColumnLayout {
         anchors.fill: parent
+        spacing: 0
+
+        // ── Top bar: ZEDEDA wordmark, product name, app-level actions ─────
+        Item {
+            id: topBar
+            Layout.fillWidth: true
+            Layout.preferredHeight: Style.topBarHeight
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: Style.cardPadding
+                anchors.rightMargin: Style.spacingSmallPlus
+                spacing: Style.spacingSmall
+
+                Image {
+                    id: zededaWordmark
+                    // 137x25 artwork; one file per ink colour because the SVG
+                    // loader cannot recolour it
+                    source: Style.dark ? "../icons/zededa-wordmark-on-dark.svg" : "../icons/zededa-wordmark-on-light.svg"
+                    readonly property int logoWidth: Style.scaled(104)
+                    readonly property int logoHeight: Math.round(logoWidth * 25 / 137)
+                    Layout.preferredWidth: logoWidth
+                    Layout.preferredHeight: logoHeight
+                    Layout.alignment: Qt.AlignVCenter
+                    sourceSize: Qt.size(Math.round(logoWidth * Screen.devicePixelRatio), Math.round(logoHeight * Screen.devicePixelRatio))
+                    fillMode: Image.PreserveAspectFit
+                    Accessible.role: Accessible.Graphic
+                    Accessible.name: "ZEDEDA"
+                }
+
+                Text {
+                    text: qsTr("EVE Imager")
+                    font.family: Style.fontFamily
+                    font.pointSize: Style.fontSizeFormLabel
+                    font.weight: Style.fontWeightMedium
+                    color: Style.text
+                    Layout.leftMargin: Style.spacingMedium
+                    Layout.alignment: Qt.AlignVCenter
+                }
+
+                Item { Layout.fillWidth: true }
+
+                ImButton {
+                    id: optionsButton
+                    Layout.preferredHeight: Style.scaled(34)
+                    Layout.alignment: Qt.AlignVCenter
+                    implicitWidth: implicitContentWidth + leftPadding + rightPadding
+                    leftPadding: Style.spacingMedium
+                    rightPadding: Style.spacingMedium
+                    text: qsTr("App options")
+                    accessibleDescription: qsTr("Open application settings")
+                    activeFocusOnTab: true
+                    onClicked: {
+                        if (root.optionsPopup) {
+                            if (!root.optionsPopup.wizardContainer) {
+                                root.optionsPopup.wizardContainer = root
+                            }
+                            root.optionsPopup.initialize()
+                            root.optionsPopup.open()
+                        }
+                    }
+                }
+
+                ImIconButton {
+                    id: appearanceButton
+                    Layout.alignment: Qt.AlignVCenter
+                    iconName: Style.themeMode === "light" ? "sun" : Style.themeMode === "dark" ? "moon" : "monitor"
+                    label: Style.themeMode === "light" ? qsTr("Appearance: light")
+                         : Style.themeMode === "dark" ? qsTr("Appearance: dark")
+                         : qsTr("Appearance: follow system")
+                    onClicked: root.cycleThemeMode()
+                }
+            }
+
+            Rectangle {
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                height: 1
+                color: Style.border
+            }
+        }
+
+    RowLayout {
+        Layout.fillWidth: true
+        Layout.fillHeight: true
         spacing: 0
 
         // ── Sidebar ──────────────────────────────────────────────────────
@@ -272,63 +388,34 @@ Item {
             Layout.maximumWidth: Style.sidebarMaxWidth
             Layout.fillHeight: true
             color: Style.sidebarBackgroundColour
-            border.color: Style.sidebarBorderColour
-            border.width: 0
 
-            // ── Logo header ──────────────────────────────────────────────
-            Item {
-                id: sidebarLogoHeader
+            // ── Product heading ──────────────────────────────────────────
+            ColumnLayout {
+                id: sidebarHead
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.top: parent.top
-                height: logoHeaderColumn.implicitHeight + Style.cardPadding * 2 + 1 // +1 for separator
+                anchors.topMargin: Style.cardPadding
+                anchors.leftMargin: Style.cardPadding + Style.spacingXSmall
+                anchors.rightMargin: Style.spacingSmall
+                spacing: Style.spacingXXSmall
 
-                ColumnLayout {
-                    id: logoHeaderColumn
-                    anchors.top: parent.top
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.topMargin: Style.cardPadding
-                    anchors.leftMargin: Style.scaled(20)
-                    anchors.rightMargin: Style.scaled(20)
-                    spacing: Style.scaled(3)
-
-                    // EVE wordmark PNG (612×258, exact reference logo)
-                    Image {
-                        id: eveWordmarkImage
-                        source: "../icons/eve-wordmark.png"
-                        // Width = 65% of sidebar content, capped at 150px
-                        property real logoWidth: Math.min(
-                            150,
-                            Math.round((root.sidebarWidthValue - Style.scaled(40)) * 0.65))
-                        Layout.preferredWidth:  logoWidth
-                        Layout.preferredHeight: Math.max(1, Math.round(logoWidth * 258 / 612))
-                        Layout.alignment: Qt.AlignHCenter
-                        fillMode: Image.PreserveAspectFit
-                        smooth: true
-                        antialiasing: true
-                    }
-
-                    // Subtitle
-                    Text {
-                        text: qsTr("EVE Imager")
-                        font.family: Style.fontFamily
-                        font.pointSize: Style.fontSizeDescription
-                        font.letterSpacing: Style.scaled(2)
-                        color: Style.zededaNavy
-                        opacity: 0.55
-                        Layout.fillWidth: true
-                        horizontalAlignment: Text.AlignHCenter
-                    }
+                Text {
+                    text: qsTr("EVE Imager")
+                    font.family: Style.fontFamily
+                    font.pointSize: Style.fontSizeHeading
+                    font.weight: Style.fontWeightSemiBold
+                    color: Style.text
+                    Layout.fillWidth: true
+                    elide: Text.ElideRight
                 }
-
-                // Bottom separator line
-                Rectangle {
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.bottom: parent.bottom
-                    height: 1
-                    color: Style.titleSeparatorColor
+                Text {
+                    text: qsTr("Write EVE-OS installers to USB")
+                    font.family: Style.fontFamily
+                    font.pointSize: Style.fontSizeDescription
+                    color: Style.muted
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
                 }
             }
 
@@ -337,11 +424,11 @@ Item {
                 clip: true
                 anchors.left: parent.left
                 anchors.right: parent.right
-                anchors.top: sidebarLogoHeader.bottom
+                anchors.top: sidebarHead.bottom
                 anchors.bottom: sidebarBottom.top
-                anchors.topMargin: Style.cardPadding
-                anchors.leftMargin: Style.cardPadding
-                anchors.rightMargin: Style.cardPadding
+                anchors.topMargin: Style.spacingLarge
+                anchors.leftMargin: Style.spacingSmallPlus
+                anchors.rightMargin: Style.spacingXSmall
                 contentWidth: -1
                 contentHeight: sidebarColumn.implicitHeight
                 z: 1
@@ -349,17 +436,21 @@ Item {
                 ColumnLayout {
                     id: sidebarColumn
                     width: parent.width
-                    spacing: Style.spacingXSmall
+                    spacing: Style.spacingXXSmall
                     anchors.rightMargin: (sidebarScroll.contentHeight > sidebarScroll.height ? Style.scrollBarWidth : 0)
 
-                    // Steps label
+                    // Section label
                     Text {
                         text: qsTr("Setup steps")
-                        font.pointSize: Style.fontSizeDescription
+                        font.pointSize: Math.round(Style.fontSizeDescription * 0.92)
                         font.family: Style.fontFamily
-                        color: Style.sidebarTextDisabledColor
+                        font.weight: Style.fontWeightSemiBold
+                        font.capitalization: Font.AllUppercase
+                        font.letterSpacing: 1.1
+                        color: Style.muted
                         Layout.fillWidth: true
-                        Layout.bottomMargin: Style.spacingSmall
+                        Layout.leftMargin: Style.spacingSmallPlus
+                        Layout.bottomMargin: Style.spacingTiny
                         Accessible.role: Accessible.Heading
                         Accessible.name: text
                     }
@@ -380,6 +471,8 @@ Item {
 
                             property int _targetStep: root.getWizardStepFromSidebarIndex(stepItem.index)
                             property bool isActive: stepItem.index === root.getSidebarIndex(root.currentStep)
+                            // A step the user has already been through
+                            property bool isDone: stepItem.index < root.getSidebarIndex(root.currentStep)
                             property bool isClickable: {
                                 if (root.isWriting) return false
                                 var bit = 1 << _targetStep
@@ -389,14 +482,14 @@ Item {
                             Rectangle {
                                 id: headerRect
                                 anchors.fill: parent
-                                color: stepItem.isActive ? Style.sidebarActiveBackgroundColor : Style.transparent
-                                border.color: stepItem.isActive ? Style.sidebarActiveBackgroundColor : Style.transparent
-                                border.width: 1
+                                color: stepItem.isActive ? Style.sidebarActiveBackgroundColor
+                                       : (stepMouseArea.containsMouse && stepItem.isClickable) ? Style.surface2 : Style.transparent
                                 radius: root.imageWriter.isEmbeddedMode() ? Style.sidebarItemBorderRadiusEmbedded : Style.sidebarItemBorderRadius
                                 antialiasing: true
                                 clip: true
 
                                 MouseArea {
+                                    id: stepMouseArea
                                     anchors.fill: parent
                                     hoverEnabled: true
                                     enabled: stepItem.isClickable
@@ -411,8 +504,17 @@ Item {
 
                                 RowLayout {
                                     anchors.fill: parent
-                                    anchors.margins: Style.spacingSmall
-                                    spacing: Style.spacingTiny
+                                    anchors.leftMargin: Style.spacingSmallPlus
+                                    anchors.rightMargin: Style.spacingSmall
+                                    spacing: Style.spacingSmallPlus
+
+                                    ImIcon {
+                                        Layout.alignment: Qt.AlignVCenter
+                                        size: Style.scaled(18)
+                                        name: stepItem.isDone ? "check" : root.stepIcons[stepItem.index]
+                                        color: stepItem.isActive ? Style.sidebarTextOnActiveColor
+                                               : stepItem.isDone ? Style.ok : Style.muted
+                                    }
 
                                     MarqueeText {
                                         Layout.fillWidth: true
@@ -420,11 +522,10 @@ Item {
                                         text: stepItem.modelData
                                         font.pointSize: Style.fontSizeSidebarItem
                                         font.family: Style.fontFamily
-                                        color: stepItem.index > root.getSidebarIndex(root.currentStep)
-                                               ? Style.sidebarTextDisabledColor
-                                               : stepItem.isActive
-                                                 ? Style.sidebarTextOnActiveColor
-                                                 : Style.sidebarTextOnInactiveColor
+                                        font.weight: stepItem.isActive ? Style.fontWeightMedium : Font.Normal
+                                        color: stepItem.isActive ? Style.sidebarTextOnActiveColor
+                                               : stepItem.isDone ? Style.sidebarTextOnInactiveColor
+                                               : Style.sidebarTextDisabledColor
                                     }
                                 }
                             }
@@ -433,33 +534,26 @@ Item {
                 } // ColumnLayout
             } // Flickable
 
-            // App Options button pinned to bottom of sidebar
+            // App version pinned to the bottom of the sidebar
             Item {
                 id: sidebarBottom
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
-                height: Style.buttonHeightStandard + Style.cardPadding * 2
+                height: versionText.implicitHeight + Style.spacingMedium * 2
 
-                ImButton {
-                    id: optionsButton
+                Text {
+                    id: versionText
                     anchors.left: parent.left
                     anchors.right: parent.right
-                    anchors.bottom: parent.bottom
-                    anchors.margins: Style.cardPadding
-                    height: Style.buttonHeightStandard
-                    text: qsTr("App Options")
-                    accessibleDescription: qsTr("Open application settings")
-                    activeFocusOnTab: true
-                    onClicked: {
-                        if (root.optionsPopup) {
-                            if (!root.optionsPopup.wizardContainer) {
-                                root.optionsPopup.wizardContainer = root
-                            }
-                            root.optionsPopup.initialize()
-                            root.optionsPopup.open()
-                        }
-                    }
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.leftMargin: Style.cardPadding + Style.spacingXSmall
+                    anchors.rightMargin: Style.spacingSmall
+                    text: root.imageWriter ? root.imageWriter.constantVersion() : ""
+                    font.family: Style.fontFamilyMono
+                    font.pointSize: Math.round(Style.fontSizeDescription * 0.92)
+                    color: Style.muted
+                    elide: Text.ElideRight
                 }
             }
         } // sidebar Rectangle
@@ -473,11 +567,11 @@ Item {
             readonly property bool isActive: dragHandleMouseArea.containsMouse || dragHandleMouseArea.pressed
 
             Rectangle {
-                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 width: 1
-                height: parent.height * 0.75
-                color: dragHandle.isActive ? Style.sidebarDragHandleHoverColor : Style.titleSeparatorColor
+                height: parent.height
+                color: dragHandle.isActive ? Style.accent : Style.border
                 Behavior on color { ColorAnimation { duration: 150 } }
             }
 
@@ -551,6 +645,7 @@ Item {
             }
         }
     } // RowLayout
+    } // ColumnLayout (top bar + body)
 
     // ── Step components ───────────────────────────────────────────────────
 

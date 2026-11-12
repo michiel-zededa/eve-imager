@@ -43,7 +43,7 @@ BaseDialog {
         text: qsTr("Update available")
         font.pointSize: Style.fontSizeHeading
         font.family: Style.fontFamilyBold
-        font.bold: true
+        font.weight: Style.fontWeightSemiBold
         color: Style.formLabelColor
         Layout.fillWidth: true
         Accessible.role: Accessible.Heading

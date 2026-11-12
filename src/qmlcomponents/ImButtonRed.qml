@@ -12,10 +12,14 @@ Button {
     id: control
     font.family: Style.fontFamily
     font.pointSize: Style.fontSizeSm
-    font.capitalization: Font.AllUppercase
+    font.weight: Style.fontWeightMedium
     
     // Allow instances to provide a custom accessibility description
     property string accessibleDescription: ""
+
+    // "danger" turns the filled button into an outlined red one, for actions
+    // that stop or undo something (e.g. Cancel write)
+    property bool danger: false
     
     // Access imageWriter from parent context
     property var imageWriter: {
@@ -30,12 +34,14 @@ Button {
     }
 
     background: Rectangle {
-        color: control.enabled
-               ? (control.activeFocus
-                   ? Style.button2HoveredBackgroundColor
-                   : (control.hovered ? Style.button2HoveredBackgroundColor : Style.button2BackgroundColor))
-               : Qt.rgba(0, 0, 0, 0.1)
-        radius: (control.imageWriter && control.imageWriter.isEmbeddedMode()) ? Style.buttonBorderRadiusEmbedded : 4
+        color: !control.enabled ? Style.surface2
+               : control.danger ? ((control.hovered || control.down) ? Style.errBg : Style.surface)
+               : (control.hovered || control.down) ? Style.button2HoveredBackgroundColor : Style.button2BackgroundColor
+        radius: (control.imageWriter && control.imageWriter.isEmbeddedMode()) ? Style.buttonBorderRadiusEmbedded : Style.controlBorderRadius
+        // Keyboard focus: a ring in the page colour inside an accent outline
+        border.color: control.danger && control.enabled ? (control.activeFocus ? Style.err : Style.errBorder)
+                    : control.activeFocus ? Style.accentStrong : "transparent"
+        border.width: control.activeFocus ? Style.focusOutlineWidth : (control.danger && control.enabled ? 1 : 0)
         antialiasing: true  // Smooth edges at non-integer scale factors
         clip: true  // Prevent content overflow at non-integer scale factors
     }
@@ -46,9 +52,8 @@ Button {
     contentItem: Text {
         text: control.text
         font: control.font
-        color: control.enabled
-               ? (control.activeFocus || control.hovered ? Style.raspberryRed : Style.button2ForegroundColor)
-               : Qt.rgba(0, 0, 0, 0.3)
+        color: !control.enabled ? Style.disabledText
+             : control.danger ? Style.err : Style.button2ForegroundColor
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
         elide: Text.ElideRight  // Truncate if layout constrains button below content width
