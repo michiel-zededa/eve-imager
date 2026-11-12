@@ -1,0 +1,65 @@
+name: Publish release v1.2.2
+
+# TEMPORARY one-shot workflow. Creates the v1.2.2 tag + GitHub release from
+# main and then starts the normal "Build release binaries" workflow for it,
+# which builds the four binaries and attaches them to the release.
+#
+# Why this exists: the automation token cannot create a release or dispatch a
+# workflow through the API, and a release created by a workflow token does not
+# fire the `release: published` trigger. A workflow token may, however, start
+# another workflow with workflow_dispatch. Triggered by pushing the
+# ci/release-v1.2.2 branch; delete the branch once the release has its assets.
+
+on:
+  push:
+    branches:
+      - ci/release-v1.2.2
+
+permissions:
+  contents: write
+  actions: write
+
+env:
+  TAG: v1.2.2
+  TARGET_SHA: 7c567de16a33d9e9ce0dbe434dafcba6e28d47ea
+
+jobs:
+  publish:
+    name: Create release and start the build
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Create release ${{ env.TAG }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists - reusing it."
+            exit 0
+          fi
+          cat > notes.md <<'NOTES'
+          ## Fixes
+
+          - **Writing current EVE-OS releases works again.** Releases that ship their installer image zstd-compressed (`.installer.raw.zst`, e.g. 17.0.1-lts) failed to write, first with "not a multiple of 512 bytes", then with zstd decompression errors. Affects all platforms.
+          - **Write again after cancelling.** After a cancelled or failed write the Write button stayed disabled until the app was restarted.
+
+          ## New
+
+          - **Drive size check.** Compressed images unpack to much more than their download size (the 17.0.1 installer images are about 400 MB to download and 8 GiB on the drive, so they need a 16 GB USB stick). The app now reads the real size when you pick a release, shows the drive size needed, and does not let you select a drive that is too small. Write progress is a percentage again.
+          - **LTS list.** Only releases tagged `X.Y.Z-lts` are listed, and of each LTS line (e.g. 17.0, 16.0, 14.5) the newest patch.
+
+          ## Notes
+
+          - Writing a compressed image uses about 1 GiB of memory while it runs.
+          - The binaries are unsigned; see the README for how to open them on macOS and Windows, and for the Linux AppImage prerequisites.
+          NOTES
+          gh release create "$TAG" \
+            --target "$TARGET_SHA" \
+            --title "EVE Imager $TAG" \
+            --notes-file notes.md \
+            --generate-notes
+
+      - name: Start "Build release binaries" for ${{ env.TAG }}
+        run: |
+          gh workflow run release-build.yml --ref main -f tag="$TAG"
+          echo "Dispatched release-build.yml for $TAG"
