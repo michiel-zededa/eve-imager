@@ -47,6 +47,12 @@
 #include "curlnetworkconfig.h"
 #include "fastboot/sparse_encoder.h"  // isBlockZero()
 #include <QTemporaryDir>
+#include <QDir>
+#include <cstdlib>
+#include <cstring>
+#ifdef Q_OS_LINUX
+#include <pwd.h>
+#endif
 
 using namespace std;
 
@@ -112,7 +118,10 @@ DownloadThread::~DownloadThread()
         _pendingHashFuture.waitForFinished();
         _hasPendingHash = false;
     }
-    
+
+    // Covers the app being closed while an image file is being saved
+    discardIncompleteImageFile();
+
     // Close unified file operations
     if (_file && _file->IsOpen()) {
         _file->Close();
@@ -188,8 +197,94 @@ QByteArray DownloadThread::_fileGetContentsTrimmed(const QString &filename)
     return result;
 }
 
+void DownloadThread::setDestinationIsFile(bool isFile)
+{
+    _dstIsFile = isFile;
+}
+
+/*
+ * Destination is an image file: create it (or empty an existing one) and open
+ * it the way a drive is opened. There is nothing to unmount, authorize or
+ * wipe, and direct I/O is left off, so the periodic sync keeps the amount of
+ * unwritten data small.
+ */
+bool DownloadThread::discardIncompleteImageFile()
+{
+    // Only once: a later write may create a file of the same name
+    if (!_dstIsFile || _imageFileComplete || _imageFileDiscarded)
+        return false;
+    _imageFileDiscarded = true;
+    _closeFiles();
+    return QFile::remove(QFile::decodeName(_filename));
+}
+
+bool DownloadThread::_openImageFile()
+{
+    QElapsedTimer openTimer;
+    openTimer.start();
+    emit preparationStatusUpdate(tr("Creating the image file..."));
+
+    const QString path = QFile::decodeName(_filename);
+    const QString shownPath = QDir::toNativeSeparators(path);
+    {
+        QFile f(path);
+        if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate))
+        {
+            emit error(tr("Cannot create the image file '%1': %2").arg(shownPath, f.errorString()));
+            return false;
+        }
+    }
+
+#ifdef Q_OS_LINUX
+    // The app runs as root to write drives. Give the file to the person who
+    // started it, or they could not move or delete it afterwards.
+    if (::geteuid() == 0)
+    {
+        const char *uidText = ::getenv("PKEXEC_UID");
+        if (!uidText)
+            uidText = ::getenv("SUDO_UID");
+        const uid_t uid = uidText ? static_cast<uid_t>(::strtoul(uidText, nullptr, 10)) : 0;
+        if (uid != 0)
+        {
+            const struct passwd *pw = ::getpwuid(uid);
+            if (::chown(_filename.constData(), uid, pw ? pw->pw_gid : static_cast<gid_t>(-1)) != 0)
+                qDebug() << "Could not change the owner of" << path << ":" << strerror(errno);
+        }
+    }
+#endif
+
+    if (_file->OpenDevice(_filename.toStdString()) != rpi_imager::FileError::kSuccess)
+    {
+        emit error(tr("Cannot open the image file '%1'.").arg(shownPath));
+        QFile::remove(path);
+        return false;
+    }
+
+    // Nothing to authorize, but this event also starts the progress watchdog
+    emit eventDriveAuthorization(0, true);
+
+    if (_debugAsyncIO && _file->IsAsyncIOSupported())
+    {
+        bool asyncConfigured = _file->SetAsyncQueueDepth(_debugAsyncQueueDepth);
+        qDebug() << "Async I/O:" << (asyncConfigured ? "configured" : "failed to configure")
+                 << "with queue depth" << _debugAsyncQueueDepth;
+    }
+
+#ifdef Q_OS_LINUX
+    _sectorsStart = _sectorsWritten();
+#endif
+
+    emit eventDriveOpen(static_cast<quint32>(openTimer.elapsed()), true,
+                        QStringLiteral("direct_io: no; destination: file; platform: %1")
+                            .arg(SystemMemoryManager::instance().getPlatformName()));
+    return true;
+}
+
 bool DownloadThread::_openAndPrepareDevice()
 {
+    if (_dstIsFile)
+        return _openImageFile();
+
     QElapsedTimer unmountTimer;
     QElapsedTimer openTimer;
     
@@ -1795,9 +1890,10 @@ void DownloadThread::_writeComplete()
     QThread::sleep(1);
 #endif
 
+    _imageFileComplete = true;
     emit success();
 
-    if (_ejectEnabled)
+    if (_ejectEnabled && !_dstIsFile)
     {
         // Use canonical device path for eject (e.g., /dev/disk on macOS, not rdisk)
         QString ejectPath = PlatformQuirks::getEjectDevicePath(_filename);

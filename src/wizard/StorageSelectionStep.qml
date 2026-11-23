@@ -19,7 +19,7 @@ WizardStepBase {
     required property var wizardContainer
     
     title: qsTr("Select storage device")
-    subtitle: qsTr("Choose the USB drive to write the installer to.")
+    subtitle: qsTr("Choose the USB drive to write the installer to, or save it as an image file.")
     showNextButton: true
     nextButtonEnabled: wizardContainer && wizardContainer.selectedStorageName && wizardContainer.selectedStorageName.length > 0  // Disabled until user selects a storage device
     
@@ -329,20 +329,117 @@ WizardStepBase {
         }
         } // ImCard
 
-        // What the image needs, so the size limits in the list make sense
-        Text {
+        // The other destination: an image file
+        ImBanner {
             Layout.fillWidth: true
-            visible: root.wizardContainer && root.wizardContainer.eveImageSize > 0
-            text: visible ? qsTr("The selected image takes %1 on the drive. Everything on the drive you choose will be erased.")
+            visible: root.wizardContainer.saveToFile || root.saveFileError.length > 0
+            kind: root.saveFileError.length > 0 ? "err" : "info"
+            text: root.saveFileError.length > 0
+                  ? root.saveFileError
+                  : qsTr("The image will be saved as a file, not written to a drive: %1").arg(root.wizardContainer.saveFilePath)
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: Style.spacingMedium
+
+            // What the image needs, so the size limits in the list make sense
+            Text {
+                Layout.fillWidth: true
+                text: root.wizardContainer && root.wizardContainer.eveImageSize > 0
+                      ? qsTr("The selected image takes %1 on the drive. Everything on the drive you choose will be erased.")
                             .arg(root.imageWriter.formatSize(root.wizardContainer.eveImageSize))
-                          : ""
-            font.family: Style.fontFamily
-            font.pointSize: Style.fontSizeDescription
-            color: Style.muted
-            wrapMode: Text.WordWrap
+                      : qsTr("Everything on the drive you choose will be erased.")
+                font.family: Style.fontFamily
+                font.pointSize: Style.fontSizeDescription
+                color: Style.muted
+                wrapMode: Text.WordWrap
+            }
+
+            ImButton {
+                id: saveAsFileButton
+                text: root.wizardContainer.saveToFile ? qsTr("Change file…") : qsTr("Save as image file…")
+                accessibleDescription: qsTr("Save the image, with your configuration, as a file instead of writing it to a drive. Use it for network installation or write it to a drive later.")
+                onClicked: root.chooseImageFile()
+            }
         }
     }
     ]
+
+    // ── Saving to an image file instead of a drive ─────────────────────────
+    property string saveFileError: ""
+
+    // A name that says what is in the file
+    function suggestedImageFileName() {
+        var w = root.wizardContainer
+        var ext = w.eveIsIsoImage ? ".iso" : ".raw"
+        if (w.useLocalImage) {
+            var base = w.eveLocalImagePath.split(/[\\/]/).pop().replace(/\.(raw|iso|img)(\.(zst|gz|xz))?$/i, "")
+            return (base.length > 0 ? base : "eve") + "-configured" + ext
+        }
+        var name = "eve-" + w.eveVersion + "-" + w.eveArch + "-" + w.eveHypervisor + "-" + w.evePlatform
+        if (w.eveConfig && w.eveConfig.hardware)
+            name += "-" + w.eveConfig.hardware
+        return name + ext
+    }
+
+    function chooseImageFile() {
+        var name = root.suggestedImageFileName()
+        var folder = root.imageWriter.defaultSaveFolder()
+        var filter = root.wizardContainer.eveIsIsoImage ? qsTr("ISO images (*.iso);;All files (*)")
+                                                        : qsTr("Raw disk images (*.raw);;All files (*)")
+        if (root.imageWriter.nativeFileDialogAvailable()) {
+            var path = root.imageWriter.getNativeSaveFileName(qsTr("Save the image as"), folder + "/" + name, filter)
+            if (path)
+                root.useImageFile(path)
+        } else {
+            saveImageDialog.nameFilters = filter.split(";;")
+            saveImageDialog.suggestedFilename = name
+            saveImageDialog.currentFolder = (folder.charAt(0) === "/" ? "file://" : "file:///") + folder
+            saveImageDialog.open()
+        }
+    }
+
+    function useImageFile(path) {
+        var w = root.wizardContainer
+        // A name typed without an extension gets the one of the image
+        var ext = w.eveIsIsoImage ? ".iso" : ".raw"
+        var fileName = path.split(/[\\/]/).pop()
+        if (fileName.indexOf(".") < 0) {
+            path += ext
+            fileName += ext
+        }
+        if (w.useLocalImage && path === w.eveLocalImagePath) {
+            root.saveFileError = qsTr("That is the image file being read. Choose another name or folder.")
+            return
+        }
+        root.saveFileError = ""
+        root.imageWriter.setDstFile(path)
+        root.selectedDeviceName = ""
+        dstlist.currentIndex = -1
+        w.saveFilePath = path
+        w.selectedStorageName = qsTr("Image file %1").arg(fileName)
+        root.nextButtonEnabled = true
+    }
+
+    ImSaveFileDialog {
+        id: saveImageDialog
+        parent: root.wizardContainer && root.wizardContainer.overlayRootRef ? root.wizardContainer.overlayRootRef : Overlay.overlay
+        anchors.centerIn: parent
+        imageWriter: root.imageWriter
+        dialogTitle: qsTr("Save the image as")
+        onAccepted: {
+            var s = String(selectedFile)
+            if (s.indexOf("file://") === 0) {
+                s = s.substring(7)
+                if (/^\/[A-Za-z]:/.test(s))     // file:///C:/… on Windows
+                    s = s.substring(1)
+            }
+            s = decodeURIComponent(s)
+            if (s.length > 0)
+                root.useImageFile(s)
+        }
+    }
     
     // Storage delegate component
     Component {
@@ -537,6 +634,8 @@ WizardStepBase {
         } else {
             imageWriter.setDst(dstitem.device, dstitem.size)
         }
+        root.wizardContainer.saveFilePath = ""
+        root.saveFileError = ""
         selectedDeviceName = dstitem.description || dstitem.device
         root.wizardContainer.selectedStorageName = dstitem.description || dstitem.device
 
@@ -716,6 +815,8 @@ WizardStepBase {
         overlayParent: root.wizardContainer && root.wizardContainer.overlayRootRef ? root.wizardContainer.overlayRootRef : (root.Window.window ? root.Window.window.overlayRootItem : null)
         onConfirmed: {
             root.imageWriter.setDst(systemDriveConfirm.device, systemDriveConfirm.deviceSize)
+            root.wizardContainer.saveFilePath = ""
+            root.saveFileError = ""
             root.selectedDeviceName = systemDriveConfirm.driveName || systemDriveConfirm.device
             root.wizardContainer.selectedStorageName = systemDriveConfirm.driveName || systemDriveConfirm.device
             // Re-enable filtering after selection via confirmation path

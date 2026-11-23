@@ -8,6 +8,7 @@
 #include "devicewrapperstructs.h"
 #include "devicewrapperfatpartition.h"
 #include <QDebug>
+#include <cstring>
 
 DeviceWrapper::DeviceWrapper(rpi_imager::FileOperations *file_ops, QObject *parent)
     : QObject(parent), _dirty(false), _file_ops(file_ops)
@@ -88,9 +89,14 @@ void DeviceWrapper::_readIntoBlockCacheIfNeeded(quint64 offset, quint64 size)
             auto cacheEntry = new DeviceWrapperBlockCacheEntry(this);
             std::size_t bytes_read = 0;
             auto result = _file_ops->ReadSequential(reinterpret_cast<std::uint8_t*>(cacheEntry->block), 4096, bytes_read);
-            if (result != rpi_imager::FileError::kSuccess || bytes_read != 4096) {
+            if (result != rpi_imager::FileError::kSuccess || bytes_read > 4096) {
                 throw std::runtime_error("Error reading from device");
             }
+            // An image file ends where the image ends, while a drive goes on
+            // after it: a block at or past the end of a file reads short.
+            // Treat what is missing as zeros, which is what it would be.
+            if (bytes_read < 4096)
+                memset(cacheEntry->block + bytes_read, 0, 4096 - bytes_read);
             _blockcache.insert(i, cacheEntry);
         }
     }

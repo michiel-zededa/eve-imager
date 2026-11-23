@@ -130,6 +130,20 @@ public:
     void setEveConfig(const QVariantMap &config);
 
     /*
+     * The destination is an image file to create, not a drive: nothing is
+     * unmounted, wiped or ejected, and the file is removed again if the
+     * write does not finish. The file name passed to the constructor must
+     * then have been made with QFile::encodeName().
+     */
+    void setDestinationIsFile(bool isFile);
+
+    /*
+     * Call after the thread has finished: removes the image file if the write
+     * did not complete (failed or cancelled). Returns true if it removed one.
+     */
+    bool discardIncompleteImageFile();
+
+    /*
      * Debug options (set before starting the thread)
      */
     void setDebugDirectIO(bool enabled);
@@ -256,6 +270,7 @@ protected:
     QByteArray _fileGetContentsTrimmed(const QString &filename);
     bool _customizeImage();
     bool _applyEveConfig();
+    bool _openImageFile();
     bool _createSecureBootFiles(class DeviceWrapperFatPartition *fat);
     void _periodicSync();
 
@@ -277,6 +292,9 @@ protected:
     qint64 _sectorsStart;
     QByteArray _url, _useragent, _buf, _filename, _lastError, _expectedHash, _config, _cmdline, _firstrun, _cloudinit, _cloudinitNetwork, _initFormat;
     QVariantMap _eveConfig;
+    bool _dstIsFile = false;
+    bool _imageFileComplete = false;
+    bool _imageFileDiscarded = false;
     ImageOptions::AdvancedOptions _advancedOptions;
     char *_firstBlock;
     size_t _firstBlockSize;

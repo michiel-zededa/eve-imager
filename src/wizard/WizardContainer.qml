@@ -77,6 +77,9 @@ Item {
     property string selectedOsName: ""        // e.g. "EVE OS 12.5.0 amd64/kvm/generic"
     property string selectedStorageName: ""
     property string selectedDeviceName: selectedStorageName  // alias for DoneStep
+    // Set when the image is saved to a file instead of written to a drive
+    property string saveFilePath: ""
+    readonly property bool saveToFile: saveFilePath.length > 0
 
     // ── Completion snapshot (used by DoneStep — all false for EVE imager) ──
     property var completionSnapshot: ({
@@ -339,6 +342,7 @@ Item {
     function invalidateVersionDependentSteps() {
         invalidateStepsFrom(stepStorageSelection)
         selectedStorageName = ""
+        saveFilePath = ""
         eveConfigured = false
     }
 

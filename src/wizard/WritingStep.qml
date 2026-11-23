@@ -18,14 +18,19 @@ WizardStepBase {
     required property ImageWriter imageWriter
     required property var wizardContainer
 
-    title: qsTr("Write image")
+    // Saving to an image file instead of writing a drive: nothing is erased
+    readonly property bool saving: wizardContainer.saveToFile
+
+    title: root.saving ? qsTr("Save image") : qsTr("Write image")
     subtitle: {
         if (root.isWriting) {
-            return qsTr("Writing in progress. Do not disconnect the storage device.")
+            return root.saving ? qsTr("Saving in progress.")
+                               : qsTr("Writing in progress. Do not disconnect the storage device.")
         } else if (root.isComplete) {
-            return qsTr("Write complete")
+            return root.saving ? qsTr("Save complete") : qsTr("Write complete")
         } else {
-            return qsTr("Review your choices, then write the image to the storage device.")
+            return root.saving ? qsTr("Review your choices, then save the image file.")
+                               : qsTr("Review your choices, then write the image to the storage device.")
         }
     }
     nextButtonText: {
@@ -34,12 +39,12 @@ WizardStepBase {
             if (imageWriter.writeState === ImageWriter.Verifying) {
                 return qsTr("Skip verification")
             } else {
-                return qsTr("Cancel write")
+                return root.saving ? qsTr("Cancel") : qsTr("Cancel write")
             }
         } else if (root.isComplete) {
             return CommonStrings.continueText
         } else {
-            return qsTr("Write")
+            return root.saving ? qsTr("Save") : qsTr("Write")
         }
     }
     nextButtonAccessibleDescription: {
@@ -52,7 +57,8 @@ WizardStepBase {
         } else if (root.isComplete) {
             return qsTr("Continue to the completion screen")
         } else {
-            return qsTr("Begin writing the image to the storage device. All existing data will be erased.")
+            return root.saving ? qsTr("Begin saving the image file.")
+                               : qsTr("Begin writing the image to the storage device. All existing data will be erased.")
         }
     }
     backButtonAccessibleDescription: qsTr("Return to previous customization step")
@@ -100,12 +106,13 @@ WizardStepBase {
             return
         if (root.isIndeterminateProgress || total <= 0) {
             root.progressPercent = -1
-            progressText.text = qsTr("%1 written to the drive").arg(imageWriter.formatSize(now))
+            progressText.text = (root.saving ? qsTr("%1 written to the file") : qsTr("%1 written to the drive")).arg(imageWriter.formatSize(now))
         } else {
             var progress = (now / total) * 100
             progressBar.value = progress
             root.progressPercent = progress
-            progressText.text = qsTr("%1 of %2 written to the drive").arg(imageWriter.formatSize(now)).arg(imageWriter.formatSize(total))
+            progressText.text = (root.saving ? qsTr("%1 of %2 written to the file") : qsTr("%1 of %2 written to the drive"))
+                                .arg(imageWriter.formatSize(now)).arg(imageWriter.formatSize(total))
         }
     }
 
@@ -202,13 +209,14 @@ WizardStepBase {
 
                 SummaryLabel {
                     id: storageLabel
-                    text: qsTr("Storage")
-                    Accessible.name: text + ": " + (wizardContainer.selectedStorageName || CommonStrings.noStorageSelected)
+                    text: root.saving ? qsTr("Save to") : qsTr("Storage")
+                    Accessible.name: text + ": " + storageValue.text
                 }
 
                 MarqueeText {
                     id: storageValue
-                    text: wizardContainer.selectedStorageName || CommonStrings.noStorageSelected
+                    text: root.saving ? wizardContainer.saveFilePath
+                                      : (wizardContainer.selectedStorageName || CommonStrings.noStorageSelected)
                     font.pointSize: Style.fontSizeFormLabel
                     font.family: Style.fontFamily
                     color: Style.text
@@ -254,7 +262,8 @@ WizardStepBase {
             Layout.fillWidth: true
             kind: "neutral"
             visible: !root.isWriting && !root.isComplete && !root.hasFailed
-            text: qsTr("Writing erases everything on the storage device.")
+            text: root.saving ? qsTr("Nothing is erased. A file of the same name is replaced.")
+                              : qsTr("Writing erases everything on the storage device.")
         }
 
         // Progress card
@@ -447,8 +456,9 @@ WizardStepBase {
                 imageWriter.cancelWrite()
             }
         } else if (!root.isComplete) {
-            // If warnings are disabled, skip the confirmation dialog
-            if (wizardContainer.disableWarnings) {
+            // The confirmation is about erasing a drive; saving a file erases
+            // nothing. If warnings are disabled, skip it as well.
+            if (root.saving || wizardContainer.disableWarnings) {
                 beginWriteDelay.start()
             } else {
                 // Open confirmation dialog before starting

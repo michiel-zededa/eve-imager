@@ -37,6 +37,7 @@
 #include <random>
 #include <QFile>
 #include <QFileInfo>
+#include <QDir>
 #include <QTextStream>
 #include <QProcess>
 #include <QRegularExpression>
@@ -578,6 +579,7 @@ void ImageWriter::setDst(const QString &device, quint64 deviceSize)
 {
     _dst = device;
     _devLen = deviceSize;
+    _dstIsFile = false;
     _selectedDeviceValid = !device.isEmpty();
     _isRpibootDevice = false;  // Reset — setRpibootDevice() will re-set if needed
     _isFastbootDevice = false;  // Reset — setFastbootDevice() will re-set if needed
@@ -588,6 +590,74 @@ void ImageWriter::setDst(const QString &device, quint64 deviceSize)
     }
 
     qDebug() << "Device selection changed to:" << device;
+}
+
+void ImageWriter::setDstFile(const QString &path)
+{
+    setDst(path, 0);
+    _dstIsFile = !path.isEmpty();
+    qDebug() << "Destination is an image file:" << path;
+}
+
+QString ImageWriter::defaultSaveFolder() const
+{
+    QString home;
+#ifdef Q_OS_LINUX
+    // The app runs as root to write drives: suggest the folder of the person
+    // who started it, not root's
+    if (::geteuid() == 0) {
+        const char *uidText = ::getenv("PKEXEC_UID");
+        if (!uidText)
+            uidText = ::getenv("SUDO_UID");
+        if (uidText) {
+            const struct passwd *pw = ::getpwuid(static_cast<uid_t>(::strtoul(uidText, nullptr, 10)));
+            if (pw && pw->pw_dir)
+                home = QString::fromLocal8Bit(pw->pw_dir);
+        }
+    }
+#endif
+    if (!home.isEmpty()) {
+        const QString downloads = home + QStringLiteral("/Downloads");
+        return QFileInfo(downloads).isDir() ? downloads : home;
+    }
+    const QString downloads = QStandardPaths::writableLocation(QStandardPaths::DownloadLocation);
+    return downloads.isEmpty() ? QStandardPaths::writableLocation(QStandardPaths::HomeLocation) : downloads;
+}
+
+QString ImageWriter::getNativeSaveFileName(const QString &title,
+                                           const QString &initialPath,
+                                           const QString &filter)
+{
+#ifndef CLI_ONLY_BUILD
+    if (!NativeFileDialog::areNativeDialogsAvailable()) {
+        return QString();
+    }
+    return NativeFileDialog::getSaveFileName(title, initialPath, filter, _mainWindow);
+#else
+    Q_UNUSED(title);
+    Q_UNUSED(initialPath);
+    Q_UNUSED(filter);
+    return QString();
+#endif
+}
+
+/*
+ * Tell the write thread what kind of destination it has. For an image file,
+ * also remove the file again if the write fails or is cancelled: a partial
+ * image file looks like a usable one.
+ */
+void ImageWriter::_setUpThreadDestination()
+{
+    if (!_thread)
+        return;
+    _thread->setDestinationIsFile(_dstIsFile);
+    if (_dstIsFile) {
+        DownloadThread *thread = _thread;
+        connect(thread, &QThread::finished, this, [thread]() {
+            if (thread->discardIncompleteImageFile())
+                qDebug() << "Removed the incomplete image file";
+        });
+    }
 }
 
 void ImageWriter::setRpibootDevice(const QString &deviceId)
@@ -1048,6 +1118,22 @@ void ImageWriter::startWrite()
         return;
     }
 
+    if (_dstIsFile && _extrLen)
+    {
+        // An existing file of that name is replaced, so its space counts as free
+        const QFileInfo target(_dst);
+        const QStorageInfo volume(target.absolutePath());
+        const qint64 available = volume.bytesAvailable() + (target.exists() ? target.size() : 0);
+        if (volume.isValid() && volume.isReady() && available < static_cast<qint64>(_extrLen))
+        {
+            emit error(tr("Not enough free space in '%1'.\n\n"
+                          "The image file needs %2; %3 is free.")
+                       .arg(QDir::toNativeSeparators(target.absolutePath()),
+                            formatSize(_extrLen), formatSize(static_cast<quint64>(available))));
+            return;
+        }
+    }
+
     if (_extrLen && !_multipleFilesInZip && _extrLen % 512 != 0)
     {
         emit error(tr("Input file is not a valid disk image.\n\n"
@@ -1058,7 +1144,7 @@ void ImageWriter::startWrite()
 
     // Start performance stats session early so cache lookup is captured
     // Use platform-specific write device path (e.g., rdisk on macOS for direct I/O)
-    QString writeDevicePath = PlatformQuirks::getWriteDevicePath(_dst);
+    QString writeDevicePath = (_dstIsFile ? _dst : PlatformQuirks::getWriteDevicePath(_dst));
     _performanceStats->startSession(_osName.isEmpty() ? _src.fileName() : _osName, 
                                     _extrLen > 0 ? _extrLen : _downloadLen, 
                                     writeDevicePath);
@@ -1193,11 +1279,11 @@ void ImageWriter::startWrite()
     try {
         if (QUrl(urlstr).isLocalFile())
         {
-            _thread = new LocalFileExtractThread(urlstr, writeDevicePath.toLatin1(), _expectedHash, this);
+            _thread = new LocalFileExtractThread(urlstr, (_dstIsFile ? QFile::encodeName(writeDevicePath) : writeDevicePath.toLatin1()), _expectedHash, this);
         }
         else
         {
-            _thread = new DownloadExtractThread(urlstr, writeDevicePath.toLatin1(), _expectedHash, this);
+            _thread = new DownloadExtractThread(urlstr, (_dstIsFile ? QFile::encodeName(writeDevicePath) : writeDevicePath.toLatin1()), _expectedHash, this);
             if (_repo.toString() == OSLIST_URL)
             {
                 DownloadStatsTelemetry *tele = new DownloadStatsTelemetry(urlstr, _parentCategory.toLatin1(), _osName.toLatin1(), isEmbeddedMode(), _currentLangcode, this);
@@ -1547,6 +1633,7 @@ void ImageWriter::startWrite()
     qDebug() << "startWrite: Passing to thread - initFormat:" << _initFormat << "cloudinit empty:" << _cloudinit.isEmpty() << "cloudinitNetwork empty:" << _cloudinitNetwork.isEmpty();
     _thread->setImageCustomisation(_config, _cmdline, _firstrun, _cloudinit, _cloudinitNetwork, _initFormat, _advancedOptions);
     _thread->setEveConfig(_eveConfig);
+    _setUpThreadDestination();
 
     // Pass debug options to the thread
     _thread->setDebugDirectIO(_debugDirectIO);
@@ -4101,9 +4188,9 @@ void ImageWriter::_continueStartWriteAfterCacheVerification(bool cacheIsValid)
 
         // Continue with the write operation (this is the code that was after cache verification)
         // Use platform-specific write device path (e.g., rdisk on macOS for direct I/O)
-        QString writeDevicePath = PlatformQuirks::getWriteDevicePath(_dst);
+        QString writeDevicePath = (_dstIsFile ? _dst : PlatformQuirks::getWriteDevicePath(_dst));
         try {
-            _thread = new LocalFileExtractThread(urlstr.toLatin1(), writeDevicePath.toLatin1(), _expectedHash, this);
+            _thread = new LocalFileExtractThread(urlstr.toLatin1(), (_dstIsFile ? QFile::encodeName(writeDevicePath) : writeDevicePath.toLatin1()), _expectedHash, this);
         } catch (const std::bad_alloc& e) {
             _handleMemoryAllocationFailure(e.what());
             return;
@@ -4115,9 +4202,9 @@ void ImageWriter::_continueStartWriteAfterCacheVerification(bool cacheIsValid)
     else
     {
         // Use platform-specific write device path (e.g., rdisk on macOS for direct I/O)
-        QString writeDevicePath = PlatformQuirks::getWriteDevicePath(_dst);
+        QString writeDevicePath = (_dstIsFile ? _dst : PlatformQuirks::getWriteDevicePath(_dst));
         try {
-            _thread = new DownloadExtractThread(urlstr.toLatin1(), writeDevicePath.toLatin1(), _expectedHash, this);
+            _thread = new DownloadExtractThread(urlstr.toLatin1(), (_dstIsFile ? QFile::encodeName(writeDevicePath) : writeDevicePath.toLatin1()), _expectedHash, this);
             if (_repo.toString() == OSLIST_URL)
             {
                 DownloadStatsTelemetry *tele = new DownloadStatsTelemetry(urlstr.toLatin1(), _parentCategory.toLatin1(), _osName.toLatin1(), isEmbeddedMode(), _currentLangcode, this);
@@ -4436,6 +4523,7 @@ void ImageWriter::_continueStartWriteAfterCacheVerification(bool cacheIsValid)
     qDebug() << "_continueStartWrite: Passing to thread - initFormat:" << _initFormat << "cloudinit empty:" << _cloudinit.isEmpty() << "cloudinitNetwork empty:" << _cloudinitNetwork.isEmpty();
     _thread->setImageCustomisation(_config, _cmdline, _firstrun, _cloudinit, _cloudinitNetwork, _initFormat, _advancedOptions);
     _thread->setEveConfig(_eveConfig);
+    _setUpThreadDestination();
 
     // Pass debug options to the thread
     _thread->setDebugDirectIO(_debugDirectIO);
