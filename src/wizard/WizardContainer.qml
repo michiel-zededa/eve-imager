@@ -190,7 +190,7 @@ Item {
     // The controller clusters offered in the Configuration step
     readonly property var eveKnownControllers: [
         "zedcloud.zededa.net",
-        "zedcontrol.gmwtus.zededa.net",
+        "zedcloud.gmwtus.zededa.net",
         "zedcloud.pacteu.zededa.net"
     ]
     // "simple" | "advanced": how much the Configuration step shows. Saved.

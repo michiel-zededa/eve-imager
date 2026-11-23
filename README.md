@@ -154,7 +154,7 @@ After writing the image, EVE Imager puts these files on the `CONFIG` FAT partiti
 
 | File | Setting |
 |---|---|
-| `server` | Controller host name. Suggested: `zedcloud.zededa.net` (default), `zedcontrol.gmwtus.zededa.net`, `zedcloud.pacteu.zededa.net`; any host name can be typed. |
+| `server` | Controller host name. Suggested: `zedcloud.zededa.net` (default), `zedcloud.gmwtus.zededa.net`, `zedcloud.pacteu.zededa.net`; any host name can be typed. |
 | `root-certificate.pem` | _Controller root certificate_ — leave empty for the ZEDEDA clusters. Only a controller you host yourself, whose certificate is signed by your own certificate authority, needs it. |
 | `onboard.cert.pem`, `onboard.key.pem` | _Onboarding certificate_ and _key_, in place of the ones in the image. Leave empty unless your organisation has its own. The one in the image works for any number of devices: the device registers with it and sends its serial number, and the controller matches that to the node you created. |
 | `authorized_keys` | _SSH public key_ for the debug console. |
