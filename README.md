@@ -56,7 +56,7 @@ EVE Imager downloads EVE-OS releases directly from GitHub, lets you configure de
 | | |
 |---|---|
 | **Save as file…** — choose what the file is for | **Summary before saving an installer ISO** |
-| ![The four file formats: raw, compressed raw, installer ISO, network boot archive](doc/screenshots/save-formats.png) | ![Summary before saving an installer ISO, with the note about EVE Netboot Installer](doc/screenshots/save-summary.png) |
+| ![The four file formats: raw, compressed raw, installer ISO, network boot archive](doc/screenshots/save-formats.png) | ![Summary before saving an installer ISO, with what carries over to EVE Netboot Installer](doc/screenshots/save-summary.png) |
 
 ### Dark appearance
 
@@ -107,18 +107,23 @@ EVE Imager downloads EVE-OS releases directly from GitHub, lets you configure de
 4. Copy the ISO into EVE Netboot Installer's import folder. On its VM appliance, upload it in the web management or copy it to its SMB share.
 5. Within a minute the ISO is in the boot menu under _Local installers_, with its file name. Choose it on the machine to install.
 
-**What is set where**
+**What carries over, and what does not**
 
-| Setting | Where |
-|---|---|
-| Controller, network interfaces, WiFi, proxy and inspection CA certificates, controller root certificate, onboarding certificate and key, SSH key, bootstrap config | EVE Imager, **Configuration** — saved in the ISO |
-| Install disk, `/persist` disk, wipe disks, reboot after installation, soft serial, console | EVE Netboot Installer's boot menu, _Installation options..._ |
+Everything you set under **Configuration** is inside the ISO and reaches the device. EVE Netboot Installer does not change it, with one exception: the controller.
 
-**Leave the controller empty in EVE Netboot Installer.** If its _Controller_ setting has a value, the installer writes that value over the controller you set in EVE Imager, without a message. Leave it empty, or set it to the same controller. Where to find it:
+| | Settings | With EVE Netboot Installer |
+|---|---|---|
+| **Carried over** | Network interfaces (static address, DNS, NTP, VLANs), WiFi, proxy settings, inspection CA certificates, controller root certificate, onboarding certificate and key, SSH key, bootstrap config | Used as saved in the ISO. The netboot installer has no settings for these. |
+| **Carried over, unless replaced** | Controller address | Used as saved in the ISO **only if the netboot installer's _Controller_ setting is empty**. If it has a value, the installer writes that value over the one in the ISO, without a message. |
+| **Not in the ISO** | Install disk, `/persist` disk, wipe disks, reboot after installation, soft serial, console | Set in the netboot installer's boot menu under _Installation options..._. An ISO cannot hold them, which is why EVE Imager greys out its Installation section for an ISO. By default the netboot installer uses the machine's MAC address as the soft serial. |
+
+Where to find the netboot installer's _Controller_ setting, to leave it empty (or set it to the same controller):
 
 - on the VM appliance: _Installer defaults_ → _Controller_;
 - with Docker Compose: `EVE_DEFAULT_INSTALL_SERVER`;
 - for one machine: clear it in the boot menu under _Installation options..._; the menu then shows _Controller: from ISO_.
+
+The proxy and inspection settings take effect when the installed device starts and contacts the controller. The installation itself does not need them: the machine loads everything from the boot server on the local network.
 
 **Good to know**
 

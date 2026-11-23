@@ -254,16 +254,58 @@ WizardStepBase {
                               : qsTr("Writing erases everything on the storage device.")
         }
 
-        // For people who take the ISO to a network boot server: only when an
-        // installer ISO is saved as a file, never when writing a drive
-        ImBanner {
+        // For people who take the ISO to a network boot server: what carries
+        // over, what is set there, and the one thing that gets replaced. Only
+        // when an installer ISO is saved as a file, never when writing a drive.
+        ImCard {
             Layout.fillWidth: true
-            kind: "info"
+            padding: Style.spacingSmallPlus
+            spacing: Style.spacingXSmall
             visible: root.saving && root.wizardContainer.eveIsIsoImage
                      && root.wizardContainer.saveVariant !== "nettar"
                      && !root.isWriting && !root.isComplete && !root.hasFailed
-            text: qsTr("Using this ISO with EVE Netboot Installer? Copy it to its import folder and choose it in its boot menu. "
-                       + "Set the installation options there. Leave its Controller setting empty, or it replaces the controller you set here.")
+
+            Text {
+                text: qsTr("With EVE Netboot Installer")
+                font.family: Style.fontFamily
+                font.pointSize: Style.fontSizeDescription
+                font.weight: Style.fontWeightSemiBold
+                color: Style.text
+                Layout.fillWidth: true
+                Accessible.role: Accessible.Heading
+            }
+            Repeater {
+                model: [
+                    { icon: "check", tone: "ok",
+                      text: qsTr("Carried over: everything under Configuration, including proxy and inspection certificates.") },
+                    { icon: "sliders", tone: "muted",
+                      text: qsTr("Set in its boot menu: disks, soft serial, console and reboot. An ISO cannot hold these.") },
+                    { icon: "alert", tone: "warn",
+                      text: qsTr("Leave its Controller setting empty: a value there replaces the controller set here.") }
+                ]
+                RowLayout {
+                    id: netbootLine
+                    required property var modelData
+                    Layout.fillWidth: true
+                    spacing: Style.spacingSmall
+                    ImIcon {
+                        name: netbootLine.modelData.icon
+                        size: Style.scaled(15)
+                        color: netbootLine.modelData.tone === "ok" ? Style.ok
+                             : netbootLine.modelData.tone === "warn" ? Style.warn : Style.muted
+                        Layout.alignment: Qt.AlignTop
+                        Layout.topMargin: Style.scaled(1)
+                    }
+                    Text {
+                        text: netbootLine.modelData.text
+                        font.family: Style.fontFamily
+                        font.pointSize: Style.fontSizeDescription
+                        color: Style.text
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                    }
+                }
+            }
         }
 
         // Progress card
