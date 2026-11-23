@@ -431,7 +431,7 @@ Item {
         anchors.fill: parent
         spacing: 0
 
-        // ── Top bar: ZEDEDA wordmark, product name, app-level actions ─────
+        // ── Top bar: ZEDEDA wordmark and app-level actions ─────
         Item {
             id: topBar
             Layout.fillWidth: true
@@ -459,16 +459,8 @@ Item {
                     Accessible.name: "ZEDEDA"
                 }
 
-                Text {
-                    text: qsTr("EVE Imager")
-                    font.family: Style.fontFamily
-                    font.pointSize: Style.fontSizeFormLabel
-                    font.weight: Style.fontWeightMedium
-                    color: Style.text
-                    Layout.leftMargin: Style.spacingMedium
-                    Layout.alignment: Qt.AlignVCenter
-                }
-
+                // The product name is in the window title and at the top of
+                // the sidebar; it is not repeated here
                 Item { Layout.fillWidth: true }
 
                 ImButton {
