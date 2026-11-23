@@ -39,6 +39,12 @@ WizardStepBase {
     // A bootstrap config from the controller replaces the network settings
     // An installer ISO takes the configuration, but not the installer options
     readonly property bool isIso: wizardContainer.eveIsIsoImage
+    // The console choice names the serial port ttyS0, which is right for PCs
+    // and for the OnLogic FR201 only: "yes" for those, "no" for other boards
+    // of a downloaded release, "maybe" for a local image (unknown board).
+    readonly property string consoleChoice: wizardContainer.useLocalImage ? "maybe"
+        : (wizardContainer.eveArch === "amd64" || (cfg.hardware || "").length > 0) ? "yes" : "no"
+
     // How the device finds the proxy: "address" | "wpad" | "pacUrl" | "pacFile"
     readonly property string proxyMethod: cfg.proxyMethod || "address"
     readonly property bool bootstrapActive: cfg.bootstrapConfigPath.length > 0
@@ -1136,9 +1142,15 @@ WizardStepBase {
                         Layout.fillWidth: false
                         Layout.preferredWidth: Style.scaled(250)
                         label: qsTr("Console")
+                        enabled: root.consoleChoice !== "no"
+                        hint: root.consoleChoice === "no"
+                              ? qsTr("EVE-OS chooses the console for this ARM board itself.")
+                            : root.consoleChoice === "maybe"
+                              ? qsTr("ttyS0 is right for PCs and the OnLogic FR201. For other ARM boards, leave this on Image default.")
+                              : qsTr("The serial port is ttyS0 at 115200 baud.")
                         ImComboBox {
                             Layout.fillWidth: true
-                            model: [qsTr("Image default"), qsTr("Screen (VGA)"), qsTr("Serial port (ttyS0)")]
+                            model: [qsTr("Image default"), qsTr("Screen"), qsTr("Serial port (ttyS0)")]
                             currentIndex: root.cfg.console === "vga" ? 1 : root.cfg.console === "serial" ? 2 : 0
                             Accessible.name: qsTr("Console")
                             onActivated: function(i) { root.setCfg("console", i === 1 ? "vga" : i === 2 ? "serial" : "") }
@@ -1224,6 +1236,9 @@ WizardStepBase {
             if (root.cfg.controllerUrl !== wanted)
                 root.setCfg("controllerUrl", wanted)
         }
+        // A console chosen for another image does not carry over to a board it is wrong for
+        if (root.consoleChoice === "no" && root.cfg.console.length > 0)
+            root.setCfg("console", "")
         root.loadInterfaces()
     }
 }

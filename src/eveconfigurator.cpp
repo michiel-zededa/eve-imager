@@ -584,12 +584,22 @@ QByteArray EveConfigurator::buildGrubBlock(const QVariantMap &config)
     if (reboot)
         args << QStringLiteral("eve_reboot_after_install");
 
+    // The console line replaces the one EVE-OS works out for the board, so it
+    // has to name that board's serial port. ttyS0 is right for PCs and for
+    // the OnLogic FR201; other ARM boards have ttyAMA0, ttyTCU0, ttymxc0 and
+    // so on, which is why the app only offers this choice for those two.
+    // The last console= is the one the installer talks on; all get the messages.
     QString consoleLine;
+    const bool fr201 = str(config, "hardware").startsWith(QLatin1String("fr201"));
     if (console == QLatin1String("serial")) {
-        // The last console= is the one the installer talks on; both get the messages.
-        consoleLine = QStringLiteral("set_global dom0_console \"console=tty0 console=ttyS0,115200\"\n");
+        consoleLine = fr201
+            ? QStringLiteral("set_global dom0_console \"console=tty1 console=ttyS0,115200 earlycon=tty1\"\n")
+            : QStringLiteral("set_global dom0_console \"console=tty0 console=ttyS0,115200\"\n");
     } else if (console == QLatin1String("vga")) {
-        consoleLine = QStringLiteral("set_global dom0_console \"console=ttyS0,115200 console=tty0\"\n");
+        // (for the FR201 this is the line EVE-OS uses itself)
+        consoleLine = fr201
+            ? QStringLiteral("set_global dom0_console \"console=ttyS0,115200 console=tty1 earlycon=tty1\"\n")
+            : QStringLiteral("set_global dom0_console \"console=ttyS0,115200 console=tty0\"\n");
     } else if (!console.isEmpty()) {
         fail(tr("Unknown console setting \"%1\".").arg(console));
     }

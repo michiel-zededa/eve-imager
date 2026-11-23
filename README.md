@@ -188,7 +188,7 @@ Notes:
 | `eve_nuke_disks=<disks>` | _Wipe these disks first_ — clears their partition tables before installing. |
 | `eve_soft_serial=<serial>` | _Soft serial number_ — identifies the device at onboarding in place of the hardware serial. |
 | `eve_reboot_after_install` | _Reboot automatically after installation_. |
-| `console=…` | _Console_ — screen or serial port (`ttyS0`, 115200) as the main console. |
+| `console=…` | _Console_ — screen or serial port as the main console. The serial port is `ttyS0` at 115200 baud, which is right for PCs (amd64) and for the OnLogic FR201. Other ARM boards have other serial ports (`ttyAMA0`, `ttyTCU0`, `ttymxc0`, …) that EVE-OS selects itself, so the choice is switched off for them. |
 
 Not for an installer ISO: the boot loader reads `grub.cfg` only from a CONFIG partition, so these options are left out there (with network installation, kernel parameters are set on the boot server).
 

@@ -93,7 +93,10 @@ public:
      *   persistDisk          e.g. "sda" or "sdb,sdc"
      *   nukeDisks            e.g. "sda,sdb"
      *   softSerial           letters, digits, ".", "-", "_"
-     *   console              "" (image default) | "vga" | "serial"
+     *   console              "" (image default) | "vga" | "serial". The serial
+     *                        port is ttyS0: only for PCs (amd64) and the
+     *                        OnLogic FR201; other ARM boards keep the console
+     *                        EVE-OS chooses for them
      *   rebootAfterInstall   bool
      *
      *   hardware             "" | "fr201" | "fr201-nvme"
