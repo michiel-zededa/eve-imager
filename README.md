@@ -31,109 +31,44 @@ EVE Imager downloads EVE-OS releases directly from GitHub, lets you configure de
 
 ## Screenshots
 
+### The five steps
+
 | | |
 |---|---|
-| **1. Version** — pick a release, or a local image file | **2. Storage** — drives that are too small or read-only cannot be selected |
+| **1. Version** — pick a release, or a local image file | **2. Storage** — choose a drive, or save as a file |
 | ![Version step](doc/screenshots/version.png) | ![Storage step](doc/screenshots/storage.png) |
 | **3. Configuration, Simple** — controller, WiFi, proxy and traffic inspection | **3. Configuration, Advanced** — every setting, one section each |
 | ![Configuration step, Simple view](doc/screenshots/configuration.png) | ![Configuration step, Advanced view](doc/screenshots/configuration-advanced.png) |
-| **4. Write** — progress, amount written and stage | |
-| ![Write step](doc/screenshots/write.png) | |
-| **5. Done** | **Dark appearance** |
-| ![Done step](doc/screenshots/done.png) | ![Write step, dark appearance](doc/screenshots/write-dark.png) |
+| **4. Write** — progress, amount written and stage | **5. Done** |
+| ![Write step](doc/screenshots/write.png) | ![Done step](doc/screenshots/done.png) |
 
----
+### Configuration in detail
 
-## Installation
+| | |
+|---|---|
+| **Proxy and traffic inspection** (Simple) — two separate switches; here a firewall inspects the traffic and there is no proxy | **How the device finds the proxy** (Advanced) — its address, automatic discovery or a PAC script |
+| ![Simple view: proxy off, traffic inspection on with its CA certificate](doc/screenshots/configuration-inspection.png) | ![Advanced view: proxy found by its address, and traffic inspection](doc/screenshots/configuration-proxy.png) |
+| **Controller** (Advanced) — the hints say when a field can stay empty | **OnLogic FR201** — in the Platform list for arm64/kvm |
+| ![Advanced view: controller address, root certificate and onboarding certificate](doc/screenshots/configuration-controller.png) | ![Version step with the Platform list open, showing OnLogic FR201](doc/screenshots/platform-fr201.png) |
 
-### Download prebuilt binaries (recommended)
+### Saving as a file
 
-Every [GitHub release](https://github.com/michiel-zededa/eve-imager/releases) ships ready-to-run binaries, built automatically by GitHub Actions:
+| | |
+|---|---|
+| **Save as file…** — choose what the file is for | **Summary before saving an installer ISO** |
+| ![The four file formats: raw, compressed raw, installer ISO, network boot archive](doc/screenshots/save-formats.png) | ![Summary before saving an installer ISO, with the note about EVE Netboot Installer](doc/screenshots/save-summary.png) |
 
-| Platform | Asset | Notes |
-|---|---|---|
-| Linux x86_64 | `EVE-Imager-<version>-linux-x86_64.AppImage` | `chmod +x` then run — see the Linux note below |
-| Linux arm64 | `EVE-Imager-<version>-linux-aarch64.AppImage` | as above |
-| macOS (universal) | `EVE-Imager-<version>-macOS-universal.dmg` | Apple Silicon + Intel; see the note below |
-| Windows x64 | `EVE-Imager-<version>-windows-x64-setup.exe` | run the installer as Administrator |
+### Dark appearance
 
-> **macOS — the app is not signed with an Apple Developer ID.** The first time you open it, macOS Gatekeeper will refuse to launch it. Either **right-click (or Control-click) the app → Open → Open**, or go to **System Settings → Privacy & Security** and click **Open Anyway**. macOS remembers the exception after that. (Signing/notarization would remove this step but requires a paid Apple Developer account.)
-
-> **Windows** is not signed either, so SmartScreen may warn on first run — choose **More info → Run anyway**.
-
-> **Linux — running the AppImage.** Make it executable and run it as your normal user (it elevates itself via `pkexec` only when it needs to write a device — no need to launch it with `sudo`):
-> ```bash
-> chmod +x EVE-Imager-*-linux-*.AppImage
-> ./EVE-Imager-*-linux-*.AppImage
-> ```
-> On a full desktop this just works. On a **minimal or VM install** you may hit `libOpenGL.so.0: cannot open shared object file` (or a similar `libEGL`/`libGL` error) — the OpenGL libraries are GPU-driver-coupled (part of [libglvnd](https://gitlab.freedesktop.org/glvnd/libglvnd)), so the AppImage relies on the host providing them. Install them once, per distro:
-> ```bash
-> # Debian / Ubuntu
-> sudo apt install -y libopengl0 libegl1 libglx0
->
-> # Fedora / RHEL / CentOS / Rocky / Alma
-> sudo dnf install -y libglvnd-opengl libglvnd-egl libglvnd-glx
->
-> # openSUSE / SLE
-> sudo zypper install -y libglvnd Mesa-libEGL1 Mesa-libGL1
-> ```
-> If instead you get a FUSE error (`libfuse.so.2` / `fusermount`), install FUSE 2 (`libfuse2` on Debian/Ubuntu, `fuse-libs` on Fedora/RHEL, `libfuse2` on openSUSE) or run the AppImage with `--appimage-extract-and-run`.
-
-To build from source instead, follow the platform sections below.
-
-### macOS (build from source)
-
-Requirements: Xcode command-line tools, CMake ≥ 3.22, Qt 6.9 or newer (via Homebrew: `brew install qt`)
-
-```bash
-git clone https://github.com/michiel-zededa/eve-imager.git
-cd eve-imager
-
-# One-time: create a local code-signing certificate so the app runs permanently
-./setup-codesign.sh
-
-# Build and launch
-./run-dev.sh --rebuild
-```
-
-`run-dev.sh` auto-detects your Qt installation and architecture, builds the app, signs it with the local certificate, and opens it. On subsequent runs you only need `./run-dev.sh` (no rebuild needed unless sources changed).
-
-> **Note:** The build system (`cmake`) auto-signs the app after every rebuild. The `setup-codesign.sh` step only needs to be run once per machine.
-
-#### Distributing to others
-
-The local self-signed certificate is machine-specific and cannot be bundled with the app. For sharing with colleagues:
-
-- **Quick option:** Recipients right-click the `.app` → **Open** the first time to bypass Gatekeeper. macOS remembers the exception.
-- **Proper distribution:** Sign with an [Apple Developer ID](https://developer.apple.com/programs/) certificate and notarize — the app will then run on any Mac without any extra steps.
-
-### Linux (build from source)
-
-Requirements: CMake ≥ 3.22 and **Qt 6.9 or newer**. The Qt packages of most distributions are older than that, so install Qt with the [Qt Online Installer](https://www.qt.io/download-qt-installer) or [aqtinstall](https://github.com/miurahr/aqtinstall) and point CMake at it. The other libraries (curl, libarchive, zstd, xz, zlib) are downloaded and built as part of the build.
-
-```bash
-sudo apt install build-essential cmake ninja-build git pkg-config \
-    libgnutls28-dev libudev-dev libdbus-1-dev \
-    libgl1-mesa-dev libxkbcommon-dev libvulkan-dev
-git clone https://github.com/michiel-zededa/eve-imager.git
-cd eve-imager
-cmake -S src -B build -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_PREFIX_PATH=/path/to/Qt/6.9.1/gcc_64
-cmake --build build
-./build/eve-imager   # asks for elevated rights (pkexec) when it writes to a device
-```
-
-The release AppImages are built with `./create-appimage.sh --qt-root=/path/to/Qt/6.9.1/gcc_64`.
-
-### Windows
-
-Build with CMake + Qt 6.9 or newer (MinGW kit) via the Qt Online Installer: `cmake -S src -B build`, then `cmake --build build`. Run as Administrator (raw device write access requires elevation).
+| | |
+|---|---|
+| ![Version step, dark appearance](doc/screenshots/version-dark.png) | ![Write step, dark appearance](doc/screenshots/write-dark.png) |
 
 ---
 
 ## Usage
 
-1. **Version** — Select an EVE-OS version from the dropdown (loaded live from GitHub, newest first). Only LTS releases are shown (tags ending in `-lts`, e.g. `17.0.1-lts`), one entry per LTS line. Choose architecture, hypervisor, and platform; the page then shows the file that will be downloaded and how large a drive it needs. Or switch to the _Use local image file_ tab to pick a `.raw`, `.img`, `.raw.zst` or `.iso` file you already have (useful for non-LTS builds, and for an image you saved earlier).
+1. **Version** — Select an EVE-OS version from the dropdown (loaded live from GitHub, newest first). Only LTS releases are shown (tags ending in `-lts`, e.g. `17.0.1-lts`), one entry per LTS line. Choose architecture, hypervisor, and platform; the page then shows the file that will be downloaded and how large a drive it needs. For arm64 with the kvm hypervisor the Platform list also has _OnLogic FR201_ and _OnLogic FR201 without eMMC_ (see [OnLogic FR201](#onlogic-fr201-platform-list-arm64kvm)). Going back to this page later keeps what you chose. Or switch to the _Use local image file_ tab to pick a `.raw`, `.img`, `.raw.zst` or `.iso` file you already have (useful for non-LTS builds, and for an image you saved earlier).
 
 2. **Storage** — Select the target USB drive. Drives that are too small for the image, or read-only, are marked and cannot be selected. System drives are hidden unless you untick _Exclude system drives_. Double-check the device name and size before continuing: everything on the drive will be erased.
 
@@ -156,7 +91,7 @@ Build with CMake + Qt 6.9 or newer (MinGW kit) via the Qt Online Installer: `cma
 
 4. **Write** — Review the summary (image, storage, configuration) and click **Write**, then confirm that the drive may be erased. EVE Imager downloads the image (if not using a local file), streams it to the USB drive, and verifies the result. **Cancel write** stops the write and returns to the summary. When saving to a file the button reads **Save** and there is nothing to confirm.
 
-5. **Done** — The drive is ejected automatically (unless you turned that off under _App options_). Boot your target device from it, or choose **Write another** to write the same image to another drive.
+5. **Done** — The drive is ejected automatically (unless you turned that off under _App options_). Boot your target device from it, or choose **Write another** to write the same image to another drive. After saving a file, the page shows where it was saved.
 
 ---
 
@@ -202,7 +137,7 @@ EVE-OS publishes installer images for:
 |---|---|---|
 | amd64 | kvm | generic, evaluation |
 | amd64 | k | generic |
-| arm64 | kvm | generic, nvidia-jp5, nvidia-jp6, nvidia-jp7 |
+| arm64 | kvm | generic, nvidia-jp5, nvidia-jp6, nvidia-jp7 (plus OnLogic FR201, which uses the generic image) |
 | arm64 | k | generic, nvidia-jp5, nvidia-jp6, nvidia-jp7 |
 
 > **Note:** The raw image is what gets written to a drive; the release's installer ISO and network boot archive are offered on the Storage step for saving. An ISO has no CONFIG partition: it carries the same file system as a file, `config.img`, and EVE Imager writes the configuration there. The network boot archive holds that same ISO, and its `config.img` is reached the same way. The installation options (disks, soft serial, console, reboot) and the OnLogic FR201 setup need the raw image.
@@ -267,14 +202,14 @@ Choosing _OnLogic FR201_ as the platform downloads the generic arm64 image and, 
 ```
 src/
 ├── evereleasefetcher.{h,cpp}     # GitHub Releases API client
-├── eveconfigurator.{h,cpp}       # Writes EVE config to CONFIG partition
+├── eveconfigurator.{h,cpp}       # Writes the configuration: CONFIG partition, or config.img in an ISO / net tar
 ├── devicewrapperfatpartition.*   # FAT12/16/32 partition read/write
 ├── imagewriter.{h,cpp}           # Core download + write engine
 ├── wizard/
 │   ├── WizardContainer.qml       # 5-step wizard shell: top bar + sidebar
 │   ├── EveVersionStep.qml        # Step 0: version / image selection
-│   ├── StorageSelectionStep.qml  # Step 1: USB drive picker
-│   ├── EveCustomizationStep.qml  # Step 2: controller + network config
+│   ├── StorageSelectionStep.qml  # Step 1: USB drive picker, or save as a file
+│   ├── EveCustomizationStep.qml  # Step 2: configuration, Simple and Advanced views
 │   ├── WritingStep.qml           # Step 3: progress + write
 │   └── DoneStep.qml              # Step 4: completion
 ├── qmlcomponents/                # Shared controls: buttons, cards, pills, banners, icons, fields
