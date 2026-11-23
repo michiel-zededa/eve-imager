@@ -488,6 +488,11 @@ if(NOT BUILD_CLI_ONLY)
         qmlcomponents/ImBanner.qml
         qmlcomponents/ImScrollBar.qml
         qmlcomponents/ImProgressBar.qml
+        qmlcomponents/ImSwitch.qml
+        qmlcomponents/ImSegmented.qml
+        qmlcomponents/ImSuggestField.qml
+        qmlcomponents/ImFileRow.qml
+        qmlcomponents/ImSection.qml
         qmlcomponents/ImFileDialog.qml
         qmlcomponents/ImSaveFileDialog.qml
         qmlcomponents/ImPopup.qml

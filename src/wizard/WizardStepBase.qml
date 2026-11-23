@@ -56,6 +56,7 @@ FocusScope {
     property string skipButtonAccessibleDescription: ""
     property alias content: contentArea.children
     property alias customButtonContainer: customButtonArea.children
+    property alias headerAccessory: headerAccessoryArea.children
     // Step may set the first item to receive focus when the step becomes visible
     property var initialFocusItem: null
     // Expose action buttons for KeyNavigation in child content
@@ -89,30 +90,43 @@ FocusScope {
         anchors.bottomMargin: Style.spacingSmall
         spacing: Style.stepContentSpacing
         
-        // Header section
+        // Header section: the title, at its right whatever the step puts into
+        // headerAccessory (the Configuration step's Simple / Advanced switch),
+        // and the subtitle below over the full width
         ColumnLayout {
             Layout.fillWidth: true
             spacing: Style.spacingSmall
             visible: (root.title && root.title.length > 0) || (root.subtitle && root.subtitle.length > 0)
-            
-            MarqueeText {
-                id: titleText
-                text: root.title
-                font.pointSize: Style.fontSizeTitle
-                font.family: Style.fontFamilyBold
-                font.weight: Style.fontWeightSemiBold
-                font.letterSpacing: -0.3
-                color: Style.formLabelColor
+
+            RowLayout {
                 Layout.fillWidth: true
-                visible: root.title && root.title.length > 0
-                Accessible.role: Accessible.Heading
-                Accessible.name: root.title
-                Accessible.ignored: false
-                Accessible.focusable: root.imageWriter ? root.imageWriter.isScreenReaderActive() : false
-                focusPolicy: (root.imageWriter && root.imageWriter.isScreenReaderActive()) ? Qt.TabFocus : Qt.NoFocus
-                activeFocusOnTab: root.imageWriter ? root.imageWriter.isScreenReaderActive() : false
+                spacing: Style.spacingMedium
+
+                MarqueeText {
+                    id: titleText
+                    text: root.title
+                    font.pointSize: Style.fontSizeTitle
+                    font.family: Style.fontFamilyBold
+                    font.weight: Style.fontWeightSemiBold
+                    font.letterSpacing: -0.3
+                    color: Style.formLabelColor
+                    Layout.fillWidth: true
+                    visible: root.title && root.title.length > 0
+                    Accessible.role: Accessible.Heading
+                    Accessible.name: root.title
+                    Accessible.ignored: false
+                    Accessible.focusable: root.imageWriter ? root.imageWriter.isScreenReaderActive() : false
+                    focusPolicy: (root.imageWriter && root.imageWriter.isScreenReaderActive()) ? Qt.TabFocus : Qt.NoFocus
+                    activeFocusOnTab: root.imageWriter ? root.imageWriter.isScreenReaderActive() : false
+                }
+
+                RowLayout {
+                    id: headerAccessoryArea
+                    Layout.alignment: Qt.AlignVCenter
+                    visible: children.length > 0
+                }
             }
-            
+
             MarqueeText {
                 id: subtitleText
                 text: root.subtitle

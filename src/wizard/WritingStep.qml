@@ -229,7 +229,7 @@ WizardStepBase {
                     font.family: Style.fontFamily
                     color: Style.text
                     wrapMode: Text.WordWrap
-                    maximumLineCount: 3
+                    maximumLineCount: 6
                     elide: Text.ElideRight
                     Layout.fillWidth: true
                     Accessible.ignored: true  // Read as part of the label

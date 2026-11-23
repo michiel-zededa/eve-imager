@@ -108,23 +108,43 @@ Item {
     property bool   eveIsIsoImage: false      // true = ISO asset (no config customization)
 
     // ── EVE device configuration ──────────────────────────────────────────
+    // Keys as EveConfigurator (src/eveconfigurator.h) reads them
     property var eveConfig: ({
-        controllerUrl:      "",
-        networkMode:        "dhcp",   // "dhcp" | "static"
-        staticIp:           "",
-        gateway:            "",
-        dns:                "",
-        proxyUrl:           "",
-        wifiSsid:           "",   // WiFi SSID
-        wifiPassword:       "",   // WiFi pre-shared key
-        rootCertPath:       "",   // root-certificate.pem (controller CA)
-        onboardCertPath:    "",   // onboard.cert.pem
-        onboardKeyPath:     "",   // onboard.key.pem
-        authorizedKeys:     "",   // authorized_keys (SSH public key text)
-        installDisk:        "",   // eve_install_disk grub param
-        persistDisk:        "",   // eve_persist_disk grub param
-        rebootAfterInstall: false // eve_reboot_after_install grub param
+        controllerUrl:      "",       // set to the default cluster when a release is chosen
+        rootCertPath:       "",       // controller root certificate (private CA)
+        onboardCertPath:    "",       // onboarding certificate
+        onboardKeyPath:     "",       // onboarding key
+        authorizedKeys:     "",       // SSH public key for the debug console
+        interfaces:         [],       // [{ ifName, mode, isMgmt, ip, gateway, dns, ntp, vlans: [{ tag, mode, isMgmt, ip, gateway, dns }] }]
+        wifiSsid:           "",
+        wifiPassword:       "",
+        proxyEnabled:       false,
+        proxyAddress:       "",       // host:port
+        proxyExceptions:    "",
+        proxyPacUrl:        "",
+        proxyPacFilePath:   "",
+        proxyInspects:      false,    // the proxy intercepts TLS
+        proxyCertPaths:     [],       // proxy CA certificates
+        installDisk:        "",
+        persistDisk:        "",
+        nukeDisks:          "",
+        softSerial:         "",
+        console:            "",       // "" (image default) | "vga" | "serial"
+        rebootAfterInstall: false,
+        hardware:           "",       // "" | "fr201" | "fr201-nvme"
+        bootstrapConfigPath: ""       // bootstrap-config.pb from the controller
     })
+    // The controller clusters offered in the Configuration step
+    readonly property var eveKnownControllers: [
+        "zedcloud.zededa.net",
+        "zedcontrol.gmwtus.zededa.net",
+        "zedcloud.pacteu.zededa.net"
+    ]
+    // "simple" | "advanced": how much the Configuration step shows. Saved.
+    property string eveConfigMode: "simple"
+    // False until the user edits the controller field: lets the step fill in
+    // the default cluster for a release, and leave a local image as it is.
+    property bool eveControllerTouched: false
     property bool eveConfigured: false
 
     // What the Configuration step adds to the drive, in one line (Write and Done pages)
@@ -134,13 +154,70 @@ Item {
         var c = root.eveConfig
         var parts = []
         if (c.controllerUrl)                parts.push(qsTr("Controller %1").arg(c.controllerUrl))
-        if (c.networkMode === "static")     parts.push(c.staticIp ? qsTr("Static IP %1").arg(c.staticIp) : qsTr("Static IP"))
-        if (c.proxyUrl)                     parts.push(qsTr("HTTP proxy"))
-        if (c.wifiSsid)                     parts.push(qsTr("WiFi %1").arg(c.wifiSsid))
+        if (c.hardware === "fr201")         parts.push(qsTr("OnLogic FR201"))
+        if (c.hardware === "fr201-nvme")    parts.push(qsTr("OnLogic FR201 without eMMC"))
+        if (c.bootstrapConfigPath) {
+            parts.push(qsTr("Bootstrap config"))
+        } else {
+            var ifaces = c.interfaces || []
+            for (var i = 0; i < ifaces.length; i++) {
+                var f = ifaces[i]
+                if (!f.ifName) continue
+                var t = f.ifName + " " + (f.mode === "static" ? (f.ip || qsTr("static")) : qsTr("DHCP"))
+                var vl = (f.vlans || []).filter(function(v) { return ("" + v.tag).length > 0 })
+                if (vl.length > 0)
+                    t += " " + qsTr("+ VLAN %1").arg(vl.map(function(v) { return v.tag }).join(", "))
+                parts.push(t)
+            }
+            if (c.wifiSsid)                 parts.push(qsTr("WiFi %1").arg(c.wifiSsid))
+            if (c.proxyEnabled) {
+                var p = c.proxyAddress ? qsTr("Proxy %1").arg(c.proxyAddress)
+                      : (c.proxyPacUrl || c.proxyPacFilePath) ? qsTr("Proxy from PAC") : qsTr("Proxy")
+                var n = c.proxyInspects ? (c.proxyCertPaths || []).length : 0
+                if (n > 0)
+                    p += " " + (n === 1 ? qsTr("with CA certificate") : qsTr("with %1 CA certificates").arg(n))
+                parts.push(p)
+            }
+        }
+        if (c.rootCertPath)                 parts.push(qsTr("Controller root certificate"))
+        if (c.onboardCertPath)              parts.push(qsTr("Onboarding certificate"))
+        if (c.authorizedKeys)               parts.push(qsTr("SSH key"))
         if (c.installDisk)                  parts.push(qsTr("Install disk %1").arg(c.installDisk))
         if (c.persistDisk)                  parts.push(qsTr("/persist disk %1").arg(c.persistDisk))
+        if (c.nukeDisks)                    parts.push(qsTr("Wipe %1").arg(c.nukeDisks))
+        if (c.softSerial)                   parts.push(qsTr("Soft serial %1").arg(c.softSerial))
+        if (c.console === "serial")         parts.push(qsTr("Serial console"))
+        if (c.console === "vga")            parts.push(qsTr("Screen console"))
         if (c.rebootAfterInstall)           parts.push(qsTr("Reboot after install"))
         return parts.length > 0 ? parts.join(" · ") : qsTr("None")
+    }
+
+    // The settings that only the Advanced view shows, as short names. The
+    // Simple view lists them so that nothing is applied unseen.
+    function eveAdvancedSettings() {
+        var c = root.eveConfig
+        var names = []
+        if ((c.interfaces || []).some(function(f) { return f.ifName }) && !c.bootstrapConfigPath)
+            names.push(qsTr("network interfaces"))
+        if (c.proxyEnabled && (c.proxyExceptions || c.proxyPacUrl || c.proxyPacFilePath) && !c.bootstrapConfigPath)
+            names.push(qsTr("proxy details"))
+        if (c.rootCertPath)        names.push(qsTr("controller root certificate"))
+        if (c.onboardCertPath)     names.push(qsTr("onboarding certificate"))
+        if (c.authorizedKeys)      names.push(qsTr("SSH key"))
+        if (c.installDisk)         names.push(qsTr("install disk"))
+        if (c.persistDisk)         names.push(qsTr("/persist disk"))
+        if (c.nukeDisks)           names.push(qsTr("disks to wipe"))
+        if (c.softSerial)          names.push(qsTr("soft serial"))
+        if (c.console)             names.push(qsTr("console"))
+        if (c.rebootAfterInstall)  names.push(qsTr("reboot after install"))
+        if (c.hardware)            names.push(qsTr("hardware"))
+        if (c.bootstrapConfigPath) names.push(qsTr("bootstrap config"))
+        return names
+    }
+
+    function setEveConfigMode(mode) {
+        root.eveConfigMode = mode
+        root.imageWriter.setSetting("configMode", mode)
     }
 
     // "Write another" mode — skip straight to WritingStep after storage re-selection
@@ -178,6 +255,10 @@ Item {
             var savedTheme = imageWriter.getStringSetting("theme")
             if (savedTheme === "light" || savedTheme === "dark" || savedTheme === "system") {
                 Style.themeMode = savedTheme
+            }
+            // Restore how much the Configuration step shows
+            if (imageWriter.getStringSetting("configMode") === "advanced") {
+                eveConfigMode = "advanced"
             }
             // Restore persisted sidebar width
             var savedWidth = imageWriter.getStringSetting("sidebarWidth")
@@ -681,7 +762,8 @@ Item {
             imageWriter: root.imageWriter
             wizardContainer: root
             appOptionsButton: optionsButton
-            onNextClicked: root.nextStep()
+            // Only go on when the settings can be written as they are
+            onNextClicked: if (checkConfig()) root.nextStep()
             onBackClicked: root.previousStep()
         }
     }

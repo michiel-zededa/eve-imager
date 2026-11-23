@@ -2,7 +2,7 @@
 
 A graphical tool for writing [LF Edge EVE-OS](https://github.com/lf-edge/eve) installer images to USB drives. Built on top of [Raspberry Pi Imager](https://github.com/raspberrypi/rpi-imager).
 
-EVE Imager downloads EVE-OS releases directly from GitHub, lets you configure device settings (controller URL, network, WiFi), writes the image to a USB drive, and verifies the result — all in one guided workflow.
+EVE Imager downloads EVE-OS releases directly from GitHub, lets you configure device settings (controller, network, WiFi, proxy and more), writes the image to a USB drive, and verifies the result — all in one guided workflow.
 
 ![EVE Imager: selecting an EVE-OS release](doc/screenshots/version.png)
 
@@ -15,13 +15,9 @@ EVE Imager downloads EVE-OS releases directly from GitHub, lets you configure de
 - **Cascading selection** — choose Version → Architecture → Hypervisor → Platform; only combinations that actually have installer assets are shown
 - **Multi-format support** — handles `.installer.raw`, `.installer.raw.zst` (zstd-compressed), `.installer.img` (gzip-compressed, used by older EVE ≤12.x releases), and `.installer.iso`; compressed formats are decompressed on the fly while writing; when a release offers both `.installer.raw` and `.installer.raw.zst`, the smaller `.raw.zst` download is used; ISO images skip the config customization step
 - **Drive size check** — a compressed image unpacks to much more than its download size (the EVE-OS 17.0 installer images are ~400 MB to download but 8 GiB on the drive, so they need a 16 GB USB stick). The real size is read from the first bytes of the file when you pick a release; drives that are too small are marked in the storage list and cannot be selected
-- **Device configuration** — optionally pre-configure the device before writing (RAW images only):
-  - Controller URL
-  - Network mode: DHCP or static IP (address, gateway, DNS)
-  - HTTP/HTTPS proxy
-  - WiFi (SSID and WPA2 password)
-  - Target install disk and separate `/persist` disk
-  - Auto-reboot after installation
+- **Device configuration** — optionally pre-configure the device before writing (RAW images only), in a **Simple** or an **Advanced** view:
+  - _Simple_: controller (the ZEDEDA clusters are suggested, any host name can be typed), WiFi, and _My network uses a proxy_ with the proxy's CA certificate for proxies that inspect encrypted traffic
+  - _Advanced_ adds: controller root certificate and onboarding certificate/key, network interfaces (DHCP or static, NTP servers, VLANs, management or not), proxy exceptions and PAC, several proxy CA certificates, install / `/persist` / wipe disks, soft serial number, console, auto-reboot, OnLogic FR201 boot configuration, an SSH key for the debug console, and a bootstrap config exported by the controller
 - **Local image support** — bypass the GitHub release browser and write a locally downloaded `.raw` or `.iso` file instead
 - **Write + verify** — streams the download directly to the USB device and verifies the written data afterwards; the Write page shows the percentage, the amount written and the current stage
 - **Write again** — after a finished, cancelled or failed write you can write the same image to another drive, or go back and change the selection, without restarting the app
@@ -37,8 +33,10 @@ EVE Imager downloads EVE-OS releases directly from GitHub, lets you configure de
 |---|---|
 | **1. Version** — pick a release, or a local image file | **2. Storage** — drives that are too small or read-only cannot be selected |
 | ![Version step](doc/screenshots/version.png) | ![Storage step](doc/screenshots/storage.png) |
-| **3. Configuration** — optional controller, network, WiFi and install settings | **4. Write** — progress, amount written and stage |
-| ![Configuration step](doc/screenshots/configuration.png) | ![Write step](doc/screenshots/write.png) |
+| **3. Configuration, Simple** — controller, WiFi and proxy | **3. Configuration, Advanced** — every setting, one section each |
+| ![Configuration step, Simple view](doc/screenshots/configuration.png) | ![Configuration step, Advanced view](doc/screenshots/configuration-advanced.png) |
+| **4. Write** — progress, amount written and stage | |
+| ![Write step](doc/screenshots/write.png) | |
 | **5. Done** | **Dark appearance** |
 | ![Done step](doc/screenshots/done.png) | ![Write step, dark appearance](doc/screenshots/write-dark.png) |
 
@@ -137,7 +135,11 @@ Build with CMake + Qt 6.9 or newer (MinGW kit) via the Qt Online Installer: `cma
 
 2. **Storage** — Select the target USB drive. Drives that are too small for the image, or read-only, are marked and cannot be selected. System drives are hidden unless you untick _Exclude system drives_. Double-check the device name and size before continuing: everything on the drive will be erased.
 
-3. **Configuration** _(optional, RAW images only)_ — Configure any combination of the settings below. Leave everything blank to write a plain image and configure the device through the controller later. This step is skipped automatically for ISO images.
+3. **Configuration** _(optional, RAW images only)_ — The switch at the top right chooses the view; the app remembers it.
+   - **Simple** asks only where the device connects: the controller (`zedcloud.zededa.net` by default), a WiFi network if there is no cable, and whether the site uses a proxy. For a proxy that inspects encrypted traffic, tick _The proxy inspects encrypted traffic_ and choose the proxy's CA certificate.
+   - **Advanced** shows every setting in sections that open and close; a closed section says what is set in it.
+   - Settings made in Advanced stay in effect when you switch back to Simple; Simple lists them so that nothing is applied unseen.
+   - **Next** checks the settings (addresses, certificate files, sizes) and says what to correct. Anything left empty uses the EVE-OS default. This step is skipped automatically for ISO images.
 
 4. **Write** — Review the summary (image, storage, configuration) and click **Write**, then confirm that the drive may be erased. EVE Imager downloads the image (if not using a local file), streams it to the USB drive, and verifies the result. **Cancel write** stops the write and returns to the summary. A notice is shown when writing an ISO to remind you that pre-configuration is not available.
 
@@ -164,29 +166,47 @@ EVE-OS publishes installer images for:
 
 ## Configuration details
 
-When you fill in the Configuration step, EVE Imager writes the following files to the `CONFIG` FAT partition on the USB drive before ejecting:
+After writing the image, EVE Imager puts these files on the `CONFIG` FAT partition of the drive. Only files for settings you made are written.
 
-### Controller
+### Controller and onboarding
 
-| File | Description |
+| File | Setting |
 |---|---|
-| `server` | Controller hostname, e.g. `zedcloud.example.zededa.net` |
+| `server` | Controller host name. Suggested: `zedcloud.zededa.net` (default), `zedcontrol.gmwtus.zededa.net`, `zedcloud.pacteu.zededa.net`; any host name can be typed. |
+| `root-certificate.pem` | _Controller root certificate_ — only for a controller whose certificate is signed by a private CA. |
+| `onboard.cert.pem`, `onboard.key.pem` | _Onboarding certificate_ and _key_, in place of the ones in the image. |
+| `authorized_keys` | _SSH public key_ for the debug console. |
 
-### Networking / WiFi
+### Network, WiFi and proxy
 
-| File | Description |
+| File | Setting |
 |---|---|
-| `DevicePortConfig/override.json` | Network port configuration. Written when static IP, a proxy, or a WiFi network is configured; omitted for plain wired DHCP. Includes a `wlan0` port with WPA2 credentials when an SSID is provided. |
+| `DevicePortConfig/override.json` | Network interfaces (DHCP or static address, gateway, DNS, NTP, VLANs, management or not), WiFi (SSID and WPA2 password), proxy (address, _do not proxy_ list, PAC URL or PAC file) and the proxy CA certificates. Not written when none of these is set: EVE-OS then uses DHCP on its wired ports. |
+| `bootstrap-config.pb` | A _bootstrap config_ exported by the controller. EVE-OS then ignores `override.json`, so the Network interfaces, WiFi and Proxy sections are switched off while one is chosen. |
 
-The WiFi configuration uses EVE-OS's native format: `WirelessTypeWifi = 2`, `WifiKeySchemeWpaPsk = 1`, `DhcpTypeClient = 4`, as defined in EVE's device model.
+Notes:
+
+- **Proxies that inspect traffic.** A proxy that decrypts HTTPS presents its own certificates, so the device must trust the proxy's CA before it can reach the controller. The CA certificate (PEM or DER; several are possible in Advanced) goes into the network configuration, the same place the controller would put it. The app shows the certificate's subject and expiry date when you choose the file, and refuses a file that is not a certificate.
+- **Simple view and ports.** WiFi or proxy settings made in the Simple view apply to `eth0` (and `wlan0` for WiFi). If the device's uplink is another port, list it under _Network interfaces_ in Advanced.
+- The network configuration only gets the device online for onboarding; once the device is onboarded, the controller's network configuration takes over.
+- EVE-OS limits `override.json` to 16 KB. The app tells you when certificates make it larger.
 
 ### Installation (written to `grub.cfg`)
 
-| Kernel parameter | Description |
+| Kernel parameter | Setting |
 |---|---|
-| `eve_install_disk=<disk>` | Force EVE to install onto a specific disk, e.g. `nvme0n1`. Useful on servers with multiple drives. |
-| `eve_persist_disk=<disk>` | Put the `/persist` partition on a separate disk, e.g. `sda`. |
-| `eve_reboot_after_install` | Automatically reboot when installation completes. |
+| `eve_install_disk=<disk>` | _Install EVE-OS on_ — a specific disk, e.g. `nvme0n1`. |
+| `eve_persist_disk=<disk>` | _Store data (/persist) on_ — a separate disk, or several separated by commas. |
+| `eve_nuke_disks=<disks>` | _Wipe these disks first_ — clears their partition tables before installing. |
+| `eve_soft_serial=<serial>` | _Soft serial number_ — identifies the device at onboarding in place of the hardware serial. |
+| `eve_reboot_after_install` | _Reboot automatically after installation_. |
+| `console=…` | _Console_ — screen or serial port (`ttyS0`, 115200) as the main console. |
+
+An existing `grub.cfg` on the partition is kept; the app's lines sit between `# >>> EVE Imager >>>` and `# <<< EVE Imager <<<` markers and are replaced on the next write.
+
+### Hardware: OnLogic FR201 (arm64 images)
+
+_Hardware → OnLogic FR201_ applies the [FR201 boot configuration](https://github.com/lf-edge/eve#fr201-boot-configuration) to `config.txt` on the EFI system partition: it disables the TPM overlay line and enables `include fr201.txt`. _OnLogic FR201 without eMMC_ also installs onto `sdb` (unless another install disk is set) and adds `rootdelay=10`. This needs EVE-OS 14.5 or later; older images have no FR201 support and the app says so.
 
 ---
 
