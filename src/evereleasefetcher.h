@@ -63,6 +63,9 @@ class EveReleaseFetcher : public QObject
         // preferred asset (in `assets`) is a raw image. An ISO is what network
         // (PXE) installation needs.
         QList<AssetInfo> isoAssets;
+        // The network boot archives (installer-net.tar): the installer ISO
+        // together with boot loader files, for network (PXE) installation.
+        QList<AssetInfo> netTarAssets;
     };
 
 public:
@@ -154,6 +157,16 @@ public:
                                        const QString &hypervisor,
                                        const QString &platform) const;
 
+    /** The network boot archive (installer-net.tar) of this combination; "" / 0 if the release has none. */
+    Q_INVOKABLE QString netTarDownloadUrl(const QString &version,
+                                          const QString &arch,
+                                          const QString &hypervisor,
+                                          const QString &platform) const;
+    Q_INVOKABLE qint64 netTarDownloadSize(const QString &version,
+                                          const QString &arch,
+                                          const QString &hypervisor,
+                                          const QString &platform) const;
+
     /** Returns true if the asset for this combination is an ISO (not a raw image). */
     Q_INVOKABLE bool isIsoAsset(const QString &version,
                                 const QString &arch,
@@ -233,6 +246,10 @@ private:
                                   const QString &arch,
                                   const QString &hypervisor,
                                   const QString &platform) const;
+    const AssetInfo *findNetTarAsset(const QString &version,
+                                     const QString &arch,
+                                     const QString &hypervisor,
+                                     const QString &platform) const;
 
     QList<ReleaseInfo> _releases;
     QHash<QString, qint64> _imageSizes;    // asset URL -> decompressed size, once probed

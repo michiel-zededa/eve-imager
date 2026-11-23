@@ -692,14 +692,14 @@ DeviceWrapperFatPartition *EveConfigurator::findPartition(DeviceWrapper &dw, boo
  * A file is one run of sectors (EVE-OS builds its ISO without multi-extent
  * files; a 5 MB file would not need them anyway).
  */
-DeviceWrapperFatPartition *EveConfigurator::findIsoConfigImage(DeviceWrapper &dw, bool *isIso)
+DeviceWrapperFatPartition *EveConfigurator::findIsoConfigImage(DeviceWrapper &dw, quint64 base, bool *isIso)
 {
     if (isIso)
         *isIso = false;
 
     const quint64 sector = 2048;
     unsigned char pvd[2048];
-    dw.pread(reinterpret_cast<char *>(pvd), sizeof(pvd), 16 * sector);
+    dw.pread(reinterpret_cast<char *>(pvd), sizeof(pvd), base + 16 * sector);
     if (pvd[0] != 1 || memcmp(pvd + 1, "CD001", 5) != 0)
         return nullptr;
     if (isIso)
@@ -717,7 +717,7 @@ DeviceWrapperFatPartition *EveConfigurator::findIsoConfigImage(DeviceWrapper &dw
     }
 
     QByteArray dir(static_cast<int>(dirSize), 0);
-    dw.pread(dir.data(), dirSize, dirSector * sector);
+    dw.pread(dir.data(), dirSize, base + dirSector * sector);
     const unsigned char *d = reinterpret_cast<const unsigned char *>(dir.constData());
 
     quint32 pos = 0;
@@ -740,7 +740,7 @@ DeviceWrapperFatPartition *EveConfigurator::findIsoConfigImage(DeviceWrapper &dw
             if (semicolon >= 0)
                 name.truncate(semicolon);
             if (name.toLower() == "config.img") {
-                const quint64 start = static_cast<quint64>(le32(rec + 2)) * sector;
+                const quint64 start = base + static_cast<quint64>(le32(rec + 2)) * sector;
                 const quint64 size = le32(rec + 10);
                 qDebug() << "EveConfigurator: found config.img in the ISO at byte" << start << "len" << size;
                 if (size < 64 * 1024)
@@ -752,6 +752,63 @@ DeviceWrapperFatPartition *EveConfigurator::findIsoConfigImage(DeviceWrapper &dw
     }
     qDebug() << "EveConfigurator: no config.img in the root directory of the ISO";
     return nullptr;
+}
+
+/*
+ * A tar archive is a row of 512-byte headers, each followed by the member's
+ * data padded to 512 bytes. The header has the name at 0 (100 bytes, with an
+ * optional directory prefix at 345), the size in octal at 124, a type flag at
+ * 156 and "ustar" at 257. Two empty blocks end the archive.
+ */
+bool EveConfigurator::findTarMember(DeviceWrapper &dw, const QByteArray &name, quint64 *start, quint64 *size, bool *isTar)
+{
+    if (isTar)
+        *isTar = false;
+
+    quint64 pos = 0;
+    for (int entry = 0; entry < 10000; entry++) {
+        char h[512];
+        dw.pread(h, sizeof(h), pos);
+        if (memcmp(h + 257, "ustar", 5) != 0)
+            return false;       // the first block: not a tar archive; later: its end
+        if (isTar)
+            *isTar = true;
+
+        // Size: octal digits; large files use a binary form marked by the top bit
+        quint64 memberSize = 0;
+        if (static_cast<unsigned char>(h[124]) & 0x80) {
+            for (int i = 125; i < 136; i++)
+                memberSize = (memberSize << 8) | static_cast<unsigned char>(h[i]);
+        } else {
+            for (int i = 124; i < 136 && h[i] >= '0' && h[i] <= '7'; i++)
+                memberSize = memberSize * 8 + static_cast<quint64>(h[i] - '0');
+        }
+
+        const char type = h[156];
+        if (type == '0' || type == 0) {     // a regular file
+            // Only the POSIX form ("ustar" and a zero byte) keeps a directory
+            // prefix at 345; the GNU form uses those bytes for other things
+            QByteArray memberName;
+            if (memcmp(h + 257, "ustar\0", 6) == 0)
+                memberName = QByteArray(h + 345, static_cast<int>(qstrnlen(h + 345, 155)));
+            if (!memberName.isEmpty())
+                memberName += '/';
+            memberName += QByteArray(h, static_cast<int>(qstrnlen(h, 100)));
+            if (memberName.startsWith("./"))
+                memberName.remove(0, 2);
+            if (memberName == name) {
+                *start = pos + 512;
+                *size = memberSize;
+                qDebug() << "EveConfigurator: found" << name << "in the tar archive at byte" << *start << "len" << memberSize;
+                return true;
+            }
+        }
+        // Directories and links have no data; everything else (including the
+        // extended headers some archives use) is skipped over by its size
+        const bool hasData = !(type == '1' || type == '2' || type == '3' || type == '4' || type == '5' || type == '6');
+        pos += 512 + (hasData ? (memberSize + 511) / 512 * 512 : 0);
+    }
+    return false;
 }
 
 // ── Entry points ──────────────────────────────────────────────────────────────
@@ -885,10 +942,18 @@ QString EveConfigurator::validate(const QVariantMap &config)
 
 bool EveConfigurator::apply(DeviceWrapper &dw, const QVariantMap &givenConfig)
 {
-    // An installer ISO keeps its configuration in a file, config.img
+    // An installer ISO keeps its configuration in a file, config.img. The
+    // network boot archive (installer-net.tar) holds that ISO as installer.iso.
+    bool isTar = false;
+    quint64 isoStart = 0, isoSize = 0;
+    const bool isoInTar = findTarMember(dw, "installer.iso", &isoStart, &isoSize, &isTar);
     bool isIso = false;
-    std::unique_ptr<DeviceWrapperFatPartition> isoConfig(findIsoConfigImage(dw, &isIso));
-    const QVariantMap config = isIso ? withoutIsoUnsupported(givenConfig) : givenConfig;
+    std::unique_ptr<DeviceWrapperFatPartition> isoConfig;
+    if (!isTar || isoInTar)
+        isoConfig.reset(findIsoConfigImage(dw, isoStart, &isIso));
+    // Neither takes the installer options or the FR201 boot files
+    const bool isContainer = isIso || isTar;
+    const QVariantMap config = isContainer ? withoutIsoUnsupported(givenConfig) : givenConfig;
 
     if (!hasAnything(config))
         return false;
@@ -900,7 +965,10 @@ bool EveConfigurator::apply(DeviceWrapper &dw, const QVariantMap &givenConfig)
                                       || !p.authorizedKeys.isEmpty() || !p.overrideJson.isEmpty()
                                       || !p.grubBlock.isEmpty() || !p.bootstrap.isEmpty();
     if (needsConfigPartition) {
-        std::unique_ptr<DeviceWrapperFatPartition> fat(isIso ? isoConfig.release() : findPartition(dw, false));
+        std::unique_ptr<DeviceWrapperFatPartition> fat(isContainer ? isoConfig.release() : findPartition(dw, false));
+        if (!fat && isTar)
+            fail(tr("The file was saved, but the configuration could not be added: this archive has no installer.iso "
+                    "with a config.img in it. The installer-net.tar of an EVE-OS release has one."));
         if (!fat && isIso)
             fail(tr("The image was written, but this ISO has no config.img, so the configuration could not be added. "
                     "EVE-OS installer ISOs have one."));

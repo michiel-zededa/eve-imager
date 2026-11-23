@@ -27,6 +27,11 @@
  * an ISO: the installer options (the boot loader reads grub.cfg only from a
  * CONFIG partition) and the FR201 boot configuration.
  *
+ * The network boot archive of a release (installer-net.tar) holds that same
+ * ISO as its member installer.iso, next to the boot loader files. A tar member
+ * is stored as it is, in one piece, so the config.img of the ISO inside the
+ * archive is reached the same way.
+ *
  * Every function here throws std::runtime_error with a message meant for the
  * user when something that was asked for cannot be done.
  */
@@ -128,8 +133,17 @@ public:
 
 private:
     static DeviceWrapperFatPartition *findPartition(DeviceWrapper &dw, bool efiSystem);
-    /* config.img in the root directory of an ISO 9660 image; nullptr if `dw` is not such an ISO. */
-    static DeviceWrapperFatPartition *findIsoConfigImage(DeviceWrapper &dw, bool *isIso = nullptr);
+    /*
+     * config.img in the root directory of the ISO 9660 image that starts at
+     * byte `base` of `dw`; nullptr if there is no such ISO there.
+     */
+    static DeviceWrapperFatPartition *findIsoConfigImage(DeviceWrapper &dw, quint64 base, bool *isIso = nullptr);
+    /*
+     * A member of a tar archive: where its data starts and how long it is.
+     * False if `dw` is not a tar archive or has no such member.
+     */
+    static bool findTarMember(DeviceWrapper &dw, const QByteArray &name, quint64 *start, quint64 *size,
+                              bool *isTar = nullptr);
     static QByteArray readFileLimited(const QString &path, const QString &what, qint64 maxBytes);
 };
 

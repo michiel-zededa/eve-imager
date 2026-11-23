@@ -961,7 +961,7 @@ WizardStepBase {
                 Layout.fillWidth: true
                 title: qsTr("Installation")
                 enabled: !root.isIso
-                summary: root.isIso ? qsTr("Not available for an installer ISO") : root.installationSummary()
+                summary: root.isIso ? qsTr("Only for raw images") : root.installationSummary()
                 badge: root.isIso ? "" : root.badge(root.countSet([root.cfg.installDisk, root.cfg.persistDisk, root.cfg.nukeDisks,
                                                                    root.cfg.softSerial, root.cfg.console, root.cfg.rebootAfterInstall]))
                 onEnabledChanged: if (!enabled) expanded = false

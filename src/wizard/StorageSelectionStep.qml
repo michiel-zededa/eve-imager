@@ -7,6 +7,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Templates as T
 import QtQuick.Layouts
 import "../qmlcomponents"
 
@@ -367,20 +368,16 @@ WizardStepBase {
 
             ImButton {
                 id: saveAsFileButton
-                text: qsTr("Save as image file…")
-                accessibleDescription: qsTr("Save the image, with your configuration, as a file instead of writing it to a drive. It can be written to a drive later.")
-                onClicked: root.chooseImageFile(false)
-            }
-
-            // The release's installer ISO, which is what network (PXE)
-            // installation takes. Not for the FR201: its boot files are
-            // changed in the raw image.
-            ImButton {
-                id: saveAsIsoButton
-                visible: root.isoUrl().length > 0
-                text: qsTr("Save as ISO for network install…")
-                accessibleDescription: qsTr("Save the installer ISO of this release, with your configuration, for network (PXE) installation.")
-                onClicked: root.chooseImageFile(true)
+                text: root.wizardContainer.saveToFile ? qsTr("Change file…") : qsTr("Save as file…")
+                accessibleDescription: qsTr("Save the image, with your configuration, as a file instead of writing it to a drive: to write it later, or for network installation.")
+                onClicked: {
+                    // One format: straight to the file name. Several: ask which.
+                    var formats = root.saveFormats()
+                    if (formats.length === 1)
+                        root.chooseImageFile(formats[0].id)
+                    else
+                        saveFormatDialog.open()
+                }
             }
         }
     }
@@ -388,27 +385,66 @@ WizardStepBase {
 
     // ── Saving to an image file instead of a drive ─────────────────────────
     property string saveFileError: ""
+    property string pendingFormat: ""
 
-    // The size a drive needs. While the release's ISO is chosen for saving,
-    // the wizard's image size is the ISO's; a drive would get the raw image.
+    // The size a drive needs. While another file of the release (its ISO or
+    // network boot archive) is chosen for saving, the wizard's image size is
+    // that file's; a drive would get the raw image.
     readonly property real driveImageSize: {
         var w = root.wizardContainer
         if (!w) return 0
-        return (w.saveAsIso && w.eveRawSelection) ? w.eveRawSelection.imageSize : w.eveImageSize
+        return (w.saveVariant.length > 0 && w.eveRawSelection) ? w.eveRawSelection.imageSize : w.eveImageSize
     }
 
-    // The ISO of the selected release, if it has one besides the raw image
-    function isoUrl() {
+    // The selected image itself is an installer ISO (a local .iso, or a
+    // release that has no raw image): it can only be saved as it is
+    function sourceIsIso() {
         var w = root.wizardContainer
-        if (w.useLocalImage || (w.eveConfig && w.eveConfig.hardware))
-            return ""
-        return w.eveIsoUrl
+        return w.eveIsIsoImage && w.saveVariant.length === 0
+    }
+
+    // What the image can be saved as: [{ id, ext, title, detail, filter }]
+    function saveFormats() {
+        var w = root.wizardContainer
+        var iso = { id: "iso", ext: ".iso", title: qsTr("Installer ISO (.iso)"),
+                    detail: qsTr("For network (PXE) installation, remote management consoles (virtual CD) and virtual machines. Installation options are not included."),
+                    filter: qsTr("ISO images (*.iso);;All files (*)") }
+        if (root.sourceIsIso())
+            return [iso]
+        var size = root.driveImageSize > 0 ? root.imageWriter.formatSize(root.driveImageSize) : ""
+        var formats = [
+            { id: "raw", ext: ".raw", title: qsTr("Raw disk image (.raw)"),
+              detail: size.length > 0 ? qsTr("To write to a drive later. The file takes %1.").arg(size)
+                                      : qsTr("To write to a drive later."),
+              filter: qsTr("Raw disk images (*.raw *.img);;All files (*)") },
+            { id: "zst", ext: ".raw.zst", title: qsTr("Compressed raw image (.raw.zst)"),
+              detail: qsTr("The same image in a much smaller file. Compressing takes about a minute more."),
+              filter: qsTr("Compressed raw images (*.raw.zst *.zst);;All files (*)") }
+        ]
+        // The release's other files. Not for the OnLogic FR201, whose boot
+        // files are changed in the raw image; not for a local image file.
+        var otherFiles = !w.useLocalImage && !(w.eveConfig && w.eveConfig.hardware)
+        if (otherFiles && w.eveIsoUrl.length > 0)
+            formats.push(iso)
+        if (otherFiles && w.eveNetTarUrl.length > 0)
+            formats.push({ id: "nettar", ext: ".installer-net.tar", title: qsTr("Network boot archive (installer-net.tar)"),
+                           detail: qsTr("The installer ISO together with the boot loader files, for network (PXE) installation. Installation options are not included."),
+                           filter: qsTr("Network boot archives (*.tar);;All files (*)") })
+        return formats
+    }
+
+    function saveFormat(id) {
+        var formats = root.saveFormats()
+        for (var i = 0; i < formats.length; i++)
+            if (formats[i].id === id)
+                return formats[i]
+        return formats[0]
     }
 
     // A name that says what is in the file
-    function suggestedImageFileName(iso) {
+    function suggestedImageFileName(formatId) {
         var w = root.wizardContainer
-        var ext = (iso || (w.eveIsIsoImage && !w.saveAsIso)) ? ".iso" : ".raw"
+        var ext = root.saveFormat(formatId).ext
         if (w.useLocalImage) {
             var base = w.eveLocalImagePath.split(/[\\/]/).pop().replace(/\.(raw|iso|img)(\.(zst|gz|xz))?$/i, "")
             return (base.length > 0 ? base : "eve") + "-configured" + ext
@@ -419,54 +455,165 @@ WizardStepBase {
         return name + ext
     }
 
-    // iso: save the release's installer ISO instead of its raw image
-    function chooseImageFile(iso) {
-        var w = root.wizardContainer
-        var isIsoFile = iso || (w.eveIsIsoImage && !w.saveAsIso)
-        var name = root.suggestedImageFileName(iso)
+    function chooseImageFile(formatId) {
+        var format = root.saveFormat(formatId)
+        var name = root.suggestedImageFileName(format.id)
         var folder = root.imageWriter.defaultSaveFolder()
-        var filter = isIsoFile ? qsTr("ISO images (*.iso);;All files (*)")
-                               : qsTr("Raw disk images (*.raw);;All files (*)")
-        root.pendingIso = iso
+        root.pendingFormat = format.id
         if (root.imageWriter.nativeFileDialogAvailable()) {
-            var path = root.imageWriter.getNativeSaveFileName(qsTr("Save the image as"), folder + "/" + name, filter)
+            var path = root.imageWriter.getNativeSaveFileName(qsTr("Save the image as"), folder + "/" + name, format.filter)
             if (path)
-                root.useImageFile(path, iso)
+                root.useImageFile(path, format.id)
         } else {
-            saveImageDialog.nameFilters = filter.split(";;")
+            saveImageDialog.nameFilters = format.filter.split(";;")
             saveImageDialog.suggestedFilename = name
             saveImageDialog.currentFolder = (folder.charAt(0) === "/" ? "file://" : "file:///") + folder
             saveImageDialog.open()
         }
     }
 
-    property bool pendingIso: false
-
-    function useImageFile(path, iso) {
+    function useImageFile(path, formatId) {
         var w = root.wizardContainer
-        // Switch between the release's raw image and its ISO
-        if (iso)
-            w.setIsoVariant(true, w.eveIsoUrl, w.eveIsoSize)
-        else
-            w.setIsoVariant(false)
-        // A name typed without an extension gets the one of the image
-        var ext = w.eveIsIsoImage ? ".iso" : ".raw"
+        var format = root.saveFormat(formatId)
+        // The name says what the file is: a compressed image ends in .zst, a
+        // network boot archive in installer-net.tar (boot servers go by that),
+        // and a name typed without an extension gets the usual one
         var fileName = path.split(/[\\/]/).pop()
-        if (fileName.indexOf(".") < 0) {
-            path += ext
-            fileName += ext
-        }
+        var add = ""
+        if (format.id === "zst" && !/\.zst$/i.test(fileName))
+            add = /\.(raw|img)$/i.test(fileName) ? ".zst" : ".raw.zst"
+        else if (format.id === "nettar" && !/installer-net\.tar$/i.test(fileName))
+            add = /\.tar$/i.test(fileName) ? "" : ".installer-net.tar"
+        else if (fileName.indexOf(".") < 0)
+            add = format.ext
+        path += add
+        fileName += add
         if (w.useLocalImage && path === w.eveLocalImagePath) {
             root.saveFileError = qsTr("That is the image file being read. Choose another name or folder.")
             return
         }
+        // Which file of the release is saved, and whether it is compressed
+        w.setSaveVariant(format.id === "iso" && !root.sourceIsIso() ? "iso" : format.id === "nettar" ? "nettar" : "")
+        w.saveCompressed = format.id === "zst"
         root.saveFileError = ""
-        root.imageWriter.setDstFile(path)
+        root.imageWriter.setDstFile(path, w.saveCompressed)
         root.selectedDeviceName = ""
         dstlist.currentIndex = -1
         w.saveFilePath = path
-        w.selectedStorageName = qsTr("Image file %1").arg(fileName)
+        w.selectedStorageName = qsTr("File %1").arg(fileName)
         root.nextButtonEnabled = true
+    }
+
+    // Which kind of file to save
+    BaseDialog {
+        id: saveFormatDialog
+        imageWriter: root.imageWriter
+        parent: root.wizardContainer && root.wizardContainer.overlayRootRef ? root.wizardContainer.overlayRootRef : Overlay.overlay
+        anchors.centerIn: parent
+
+        property var formats: []
+
+        function escapePressed() {
+            saveFormatDialog.close()
+        }
+
+        onAboutToShow: formats = root.saveFormats()
+
+        Component.onCompleted: {
+            registerFocusGroup("formats", function() {
+                var items = []
+                for (var i = 0; i < formatRepeater.count; i++)
+                    items.push(formatRepeater.itemAt(i))
+                return items
+            }, 0)
+            registerFocusGroup("buttons", function() { return [saveFormatCancel] }, 1)
+        }
+        onOpened: rebuildFocusOrder()
+
+        Text {
+            text: qsTr("Save as a file")
+            font.family: Style.fontFamily
+            font.pointSize: Style.fontSizeHeading
+            font.weight: Style.fontWeightSemiBold
+            color: Style.text
+            Layout.fillWidth: true
+            Accessible.role: Accessible.Heading
+        }
+        Text {
+            text: qsTr("Your configuration is included. Choose what you need the file for.")
+            font.family: Style.fontFamily
+            font.pointSize: Style.fontSizeDescription
+            color: Style.muted
+            wrapMode: Text.WordWrap
+            Layout.fillWidth: true
+        }
+
+        Repeater {
+            id: formatRepeater
+            model: saveFormatDialog.formats
+
+            T.AbstractButton {
+                id: formatRow
+                required property var modelData
+                Layout.fillWidth: true
+                Layout.preferredWidth: Style.scaled(460)
+                padding: Style.spacingSmallPlus
+                implicitHeight: formatText.implicitHeight + topPadding + bottomPadding
+                activeFocusOnTab: true
+                focusPolicy: Qt.TabFocus
+                hoverEnabled: true
+                onClicked: {
+                    saveFormatDialog.close()
+                    root.chooseImageFile(formatRow.modelData.id)
+                }
+                Keys.onReturnPressed: clicked()
+                Keys.onEnterPressed: clicked()
+
+                background: Rectangle {
+                    radius: Style.controlBorderRadius
+                    color: formatRow.hovered || formatRow.activeFocus ? Style.accentSoft : Style.surface
+                    border.width: formatRow.activeFocus ? 2 : 1
+                    border.color: formatRow.hovered || formatRow.activeFocus ? Style.accent : Style.border
+                }
+                contentItem: ColumnLayout {
+                    id: formatText
+                    spacing: Style.spacingXXSmall
+                    Text {
+                        text: formatRow.modelData.title
+                        font.family: Style.fontFamily
+                        font.pointSize: Style.fontSizeFormLabel
+                        font.weight: Style.fontWeightSemiBold
+                        color: Style.text
+                        Layout.fillWidth: true
+                    }
+                    Text {
+                        text: formatRow.modelData.detail
+                        font.family: Style.fontFamily
+                        font.pointSize: Style.fontSizeDescription
+                        color: Style.muted
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                    }
+                }
+
+                Accessible.role: Accessible.Button
+                Accessible.name: formatRow.modelData.title
+                Accessible.description: formatRow.modelData.detail
+                Accessible.onPressAction: clicked()
+            }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.topMargin: Style.spacingSmall
+            Item { Layout.fillWidth: true }
+            ImButton {
+                id: saveFormatCancel
+                text: CommonStrings.cancel
+                activeFocusOnTab: true
+                onClicked: saveFormatDialog.close()
+            }
+        }
     }
 
     ImSaveFileDialog {
@@ -484,10 +631,10 @@ WizardStepBase {
             }
             s = decodeURIComponent(s)
             if (s.length > 0)
-                root.useImageFile(s, root.pendingIso)
+                root.useImageFile(s, root.pendingFormat)
         }
     }
-    
+
     // Storage delegate component
     Component {
         id: dstdelegate
@@ -682,7 +829,8 @@ WizardStepBase {
             imageWriter.setDst(dstitem.device, dstitem.size)
         }
         root.wizardContainer.saveFilePath = ""
-        root.wizardContainer.setIsoVariant(false)
+        root.wizardContainer.setSaveVariant("")
+        root.wizardContainer.saveCompressed = false
         root.saveFileError = ""
         selectedDeviceName = dstitem.description || dstitem.device
         root.wizardContainer.selectedStorageName = dstitem.description || dstitem.device
@@ -864,7 +1012,8 @@ WizardStepBase {
         onConfirmed: {
             root.imageWriter.setDst(systemDriveConfirm.device, systemDriveConfirm.deviceSize)
             root.wizardContainer.saveFilePath = ""
-            root.wizardContainer.setIsoVariant(false)
+            root.wizardContainer.setSaveVariant("")
+        root.wizardContainer.saveCompressed = false
             root.saveFileError = ""
             root.selectedDeviceName = systemDriveConfirm.driveName || systemDriveConfirm.device
             root.wizardContainer.selectedStorageName = systemDriveConfirm.driveName || systemDriveConfirm.device

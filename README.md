@@ -19,8 +19,8 @@ EVE Imager downloads EVE-OS releases directly from GitHub, lets you configure de
 - **Device configuration** — optionally pre-configure the device before writing, in a **Simple** or an **Advanced** view (an installer ISO takes everything except the installation options):
   - _Simple_: controller (the ZEDEDA clusters are suggested, any host name can be typed), WiFi, and _My network uses a proxy_ with the proxy's CA certificate for proxies that inspect encrypted traffic
   - _Advanced_ adds: controller root certificate and onboarding certificate/key, network interfaces (DHCP or static, NTP servers, VLANs, management or not), proxy exceptions and PAC, several proxy CA certificates, install / `/persist` / wipe disks, soft serial number, console, auto-reboot, an SSH key for the debug console, and a bootstrap config exported by the controller
-- **Save as a file** — instead of writing to a drive, save the image with your configuration: as a raw image to write later, or as the release's installer ISO for network (PXE) installation
-- **Local image support** — bypass the GitHub release browser and write a locally downloaded `.raw` or `.iso` file instead
+- **Save as a file** — instead of writing to a drive, save the image with your configuration: as a raw image (`.raw`, or compressed `.raw.zst`) to write later, or as the release's installer ISO or network boot archive (`installer-net.tar`) for network (PXE) installation
+- **Local image support** — bypass the GitHub release browser and write an image file you already have instead: `.raw`, `.img`, `.raw.zst` or `.iso`, including one saved earlier with this app
 - **Write + verify** — streams the download directly to the USB device and verifies the written data afterwards; the Write page shows the percentage, the amount written and the current stage
 - **Write again** — after a finished, cancelled or failed write you can write the same image to another drive, or go back and change the selection, without restarting the app
 - **5-step wizard** — Version → Storage → Configuration → Write → Done
@@ -133,11 +133,20 @@ Build with CMake + Qt 6.9 or newer (MinGW kit) via the Qt Online Installer: `cma
 
 ## Usage
 
-1. **Version** — Select an EVE-OS version from the dropdown (loaded live from GitHub, newest first). Only LTS releases are shown (tags ending in `-lts`, e.g. `17.0.1-lts`), one entry per LTS line. Choose architecture, hypervisor, and platform; the page then shows the file that will be downloaded and how large a drive it needs. Or switch to the _Use local image file_ tab to pick a `.raw` or `.iso` file you already have (useful for non-LTS builds).
+1. **Version** — Select an EVE-OS version from the dropdown (loaded live from GitHub, newest first). Only LTS releases are shown (tags ending in `-lts`, e.g. `17.0.1-lts`), one entry per LTS line. Choose architecture, hypervisor, and platform; the page then shows the file that will be downloaded and how large a drive it needs. Or switch to the _Use local image file_ tab to pick a `.raw`, `.img`, `.raw.zst` or `.iso` file you already have (useful for non-LTS builds, and for an image you saved earlier).
 
 2. **Storage** — Select the target USB drive. Drives that are too small for the image, or read-only, are marked and cannot be selected. System drives are hidden unless you untick _Exclude system drives_. Double-check the device name and size before continuing: everything on the drive will be erased.
 
-   Instead of a drive you can save a file: **Save as image file…** saves the image with your configuration as a `.raw` file, which you can write later by choosing it under _Use local image file_. **Save as ISO for network install…** saves the release's installer ISO with your configuration; that is the format network (PXE) installation takes, for example with [eve-netboot-installer](https://github.com/michiel-zededa/eve-netboot-installer). Nothing is erased when saving, and a file that could not be completed is removed again.
+   Instead of a drive you can save a file with **Save as file…**. Your configuration is included. The formats:
+
+   | Format | Use |
+   |---|---|
+   | Raw disk image (`.raw`) | To write to a drive later: choose the file under _Use local image file_. As large as the drive image (8 GB for EVE-OS 17.0). |
+   | Compressed raw image (`.raw.zst`) | The same, in a much smaller file (about 0.4 GB for EVE-OS 17.0). Compressing takes about a minute more. |
+   | Installer ISO (`.iso`) | For network (PXE) installation, for example with [eve-netboot-installer](https://github.com/michiel-zededa/eve-netboot-installer), for remote management consoles (virtual CD) and for virtual machines. |
+   | Network boot archive (`installer-net.tar`) | The installer ISO together with the boot loader files, for network (PXE) installation. |
+
+   The ISO and the archive are the release's own files and are offered when the release has them; they do not take the installation options or the OnLogic FR201 setup. Nothing is erased when saving, and a file that could not be completed is removed again.
 
 3. **Configuration** _(optional)_ — The switch at the top right chooses the view; the app remembers it.
    - **Simple** asks only where the device connects: the controller (`zedcloud.zededa.net` by default), a WiFi network if there is no cable, and whether the site uses a proxy. For a proxy that inspects encrypted traffic, tick _The proxy inspects encrypted traffic_ and choose the proxy's CA certificate.
@@ -162,7 +171,7 @@ EVE-OS publishes installer images for:
 | arm64 | kvm | generic, nvidia-jp5, nvidia-jp6, nvidia-jp7 |
 | arm64 | k | generic, nvidia-jp5, nvidia-jp6, nvidia-jp7 |
 
-> **Note:** For a release that has both, the raw image is used for drives; its installer ISO is offered on the Storage step for saving. An ISO has no CONFIG partition: it carries the same file system as a file, `config.img`, and EVE Imager writes the configuration there. The installation options (disks, soft serial, console, reboot) and the OnLogic FR201 setup need the raw image.
+> **Note:** The raw image is what gets written to a drive; the release's installer ISO and network boot archive are offered on the Storage step for saving. An ISO has no CONFIG partition: it carries the same file system as a file, `config.img`, and EVE Imager writes the configuration there. The network boot archive holds that same ISO, and its `config.img` is reached the same way. The installation options (disks, soft serial, console, reboot) and the OnLogic FR201 setup need the raw image.
 
 > **Note:** If a release is missing from the version list, it may be incorrectly marked as `prerelease=true` on GitHub. Ask the EVE team to correct the release — no code change is needed in EVE Imager.
 

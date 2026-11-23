@@ -82,8 +82,11 @@ public:
     /* Set device to write to */
     Q_INVOKABLE void setDst(const QString &device, quint64 deviceSize = 0);
 
-    /* Save the image to this file instead of writing it to a drive */
-    Q_INVOKABLE void setDstFile(const QString &path);
+    /*
+     * Save the image to this file instead of writing it to a drive.
+     * compressed: save it zstd-compressed (a .raw.zst).
+     */
+    Q_INVOKABLE void setDstFile(const QString &path, bool compressed = false);
     /* True if the destination is an image file */
     Q_INVOKABLE bool dstIsFile() const { return _dstIsFile; }
     /* Folder to suggest for saving: the Downloads folder of the person using the app */
@@ -491,7 +494,10 @@ protected:
     DriveListModel _drivelist;
     bool _selectedDeviceValid;
     bool _dstIsFile = false;
+    bool _dstFileCompressed = false;
     void _setUpThreadDestination();
+    bool _dstCompressed() const;
+    QString _fileWritePath() const;
     WriteState _writeState;
     bool _cancelledDueToDeviceRemoval;
     HWListModel _hwlist;

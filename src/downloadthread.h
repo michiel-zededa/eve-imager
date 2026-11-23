@@ -138,6 +138,15 @@ public:
     void setDestinationIsFile(bool isFile);
 
     /*
+     * For an image file: compress it with zstd when it is complete. The thread
+     * writes the plain image to the file name it was constructed with (a
+     * working file), compresses that to `finalPath` and removes the working
+     * file. Compressing afterwards is what allows the configuration to be
+     * written into the image first.
+     */
+    void setCompressedOutput(const QString &finalPath);
+
+    /*
      * Call after the thread has finished: removes the image file if the write
      * did not complete (failed or cancelled). Returns true if it removed one.
      */
@@ -271,6 +280,7 @@ protected:
     bool _customizeImage();
     bool _applyEveConfig();
     bool _openImageFile();
+    bool _compressImageFile();
     bool _createSecureBootFiles(class DeviceWrapperFatPartition *fat);
     void _periodicSync();
 
@@ -295,6 +305,7 @@ protected:
     bool _dstIsFile = false;
     bool _imageFileComplete = false;
     bool _imageFileDiscarded = false;
+    QString _compressTo;
     ImageOptions::AdvancedOptions _advancedOptions;
     char *_firstBlock;
     size_t _firstBlockSize;

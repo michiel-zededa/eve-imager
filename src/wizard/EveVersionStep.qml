@@ -180,8 +180,8 @@ WizardStepBase {
         var h = hvCombo.currentIndex >= 0 ? root.hvModel[hvCombo.currentIndex] : ""
         // The lists describe the release's preferred image. If its ISO had
         // been chosen for saving, that choice ends here: pick the destination again.
-        if (root.wizardContainer.saveAsIso) {
-            root.wizardContainer.saveAsIso = false
+        if (root.wizardContainer.saveVariant.length > 0) {
+            root.wizardContainer.saveVariant = ""
             root.wizardContainer.eveRawSelection = null
             root.wizardContainer.saveFilePath = ""
             root.wizardContainer.selectedStorageName = ""
@@ -203,6 +203,8 @@ WizardStepBase {
         var hasOtherIso = hasAll && !root.wizardContainer.eveIsIsoImage
         root.wizardContainer.eveIsoUrl       = hasOtherIso ? releaseFetcher.isoDownloadUrl(v, a, h, p) : ""
         root.wizardContainer.eveIsoSize      = hasOtherIso ? releaseFetcher.isoDownloadSize(v, a, h, p) : 0
+        root.wizardContainer.eveNetTarUrl    = hasAll ? releaseFetcher.netTarDownloadUrl(v, a, h, p) : ""
+        root.wizardContainer.eveNetTarSize   = hasAll ? releaseFetcher.netTarDownloadSize(v, a, h, p) : 0
         // Size the image takes on the drive. For uncompressed assets that is
         // the download size. For compressed ones it has to be read from the
         // file itself: use the value if we already have it and (re)start the
@@ -525,7 +527,7 @@ WizardStepBase {
                             ImTextField {
                                 id: localPathField
                                 Layout.fillWidth: true
-                                placeholderText: qsTr("Path to .raw or .iso image file…")
+                                placeholderText: qsTr("Path to a .raw, .raw.zst or .iso image file…")
                                 readOnly: true
                                 text: root.wizardContainer.eveLocalImagePath
                             }
@@ -537,8 +539,8 @@ WizardStepBase {
                         }
 
                         WizardDescriptionText {
-                            text: qsTr("Select an EVE-OS installer image you already downloaded (.raw or .iso). "
-                                       + "Configuration can be added to .raw images only.")
+                            text: qsTr("Select an EVE-OS installer image you already have: a raw image (.raw, .img, .raw.zst) "
+                                       + "or an installer ISO (.iso). This is also how you write an image saved earlier with this app.")
                             Layout.fillWidth: true
                             wrapMode: Text.WordWrap
                         }
@@ -556,7 +558,7 @@ WizardStepBase {
         parent: Overlay.overlay
         anchors.centerIn: parent
         title: qsTr("Select EVE-OS installer image")
-        nameFilters: ["EVE-OS installer images (*.raw *.iso)", "Raw disk images (*.raw)", "ISO images (*.iso)", "All files (*)"]
+        nameFilters: ["EVE-OS installer images (*.raw *.img *.raw.zst *.iso)", "Raw disk images (*.raw *.img *.raw.zst)", "ISO images (*.iso)", "All files (*)"]
         onAccepted: {
             var path = selectedFile.toString().replace(/^(file:\/{2,3})/, "")
             root.wizardContainer.eveLocalImagePath = path
@@ -591,6 +593,8 @@ WizardStepBase {
             root.wizardContainer.eveImageSize = 0   // local files are sized by the writer itself
             root.wizardContainer.eveIsoUrl = ""
             root.wizardContainer.eveIsoSize = 0
+            root.wizardContainer.eveNetTarUrl = ""
+            root.wizardContainer.eveNetTarSize = 0
             root.wizardContainer.eveIsIsoImage = root.wizardContainer.eveLocalImagePath.toLowerCase().endsWith(".iso")
             root.wizardContainer.selectedOsName  = root.wizardContainer.eveLocalImagePath.length > 0
                 ? qsTr("Local image: %1").arg(root.wizardContainer.eveLocalImagePath.split("/").pop())

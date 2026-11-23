@@ -284,6 +284,7 @@ int EveReleaseFetcher::parseReleases(const QByteArray &json)
         // Collect installer assets (.raw preferred, .iso as fallback)
         QList<AssetInfo> assets;
         QList<AssetInfo> isoAssets;
+        QList<AssetInfo> netTarAssets;
         const QJsonArray assetArr = ro["assets"].toArray();
         for (const QJsonValue &av : assetArr) {
             QJsonObject ao = av.toObject();
@@ -295,7 +296,24 @@ int EveReleaseFetcher::parseReleases(const QByteArray &json)
             //   .installer.img      — gzip-compressed raw image used by older EVE releases (≤12.x);
             //                         same disk image content as .raw, libarchive decompresses it
             //   .installer.iso      — ISO image (no config-partition customization)
-            // Rejected: .installer-net.tar (network installer archive, not USB-writable)
+            // Kept separately: .installer-net.tar (network boot archive: not for a
+            // drive, but it can be saved as a file with the configuration in it)
+            {
+                const QLatin1String netTarSuffix(".installer-net.tar");
+                if (name.endsWith(netTarSuffix)) {
+                    const QStringList p = name.chopped(netTarSuffix.size()).split(QLatin1Char('.'));
+                    if (p.size() >= 3) {
+                        AssetInfo tar;
+                        tar.arch = p[0];
+                        tar.hypervisor = p[1];
+                        tar.platform = p.mid(2).join(QLatin1Char('.'));
+                        tar.downloadUrl = ao["browser_download_url"].toString();
+                        tar.size = ao["size"].toVariant().toLongLong();
+                        netTarAssets.append(tar);
+                    }
+                    continue;
+                }
+            }
             bool isRawZst = name.endsWith(QLatin1String(".installer.raw.zst"));
             bool isRaw    = !isRawZst && (name.endsWith(QLatin1String(".installer.raw"))
                                        || name.endsWith(QLatin1String(".installer.img")));
@@ -381,6 +399,7 @@ int EveReleaseFetcher::parseReleases(const QByteArray &json)
         }
         rel.assets      = assets;
         rel.isoAssets   = isoAssets;
+        rel.netTarAssets = netTarAssets;
         _releases.append(rel);
     }
 
@@ -534,6 +553,40 @@ EveReleaseFetcher::findIsoAsset(const QString &version,
         break;
     }
     return nullptr;
+}
+
+const EveReleaseFetcher::AssetInfo *
+EveReleaseFetcher::findNetTarAsset(const QString &version,
+                                   const QString &arch,
+                                   const QString &hypervisor,
+                                   const QString &platform) const
+{
+    for (const ReleaseInfo &r : _releases) {
+        if (r.version != version) continue;
+        for (const AssetInfo &a : r.netTarAssets)
+            if (a.arch == arch && a.hypervisor == hypervisor && a.platform == platform)
+                return &a;
+        break;
+    }
+    return nullptr;
+}
+
+QString EveReleaseFetcher::netTarDownloadUrl(const QString &version,
+                                             const QString &arch,
+                                             const QString &hypervisor,
+                                             const QString &platform) const
+{
+    const AssetInfo *a = findNetTarAsset(version, arch, hypervisor, platform);
+    return a ? a->downloadUrl : QString();
+}
+
+qint64 EveReleaseFetcher::netTarDownloadSize(const QString &version,
+                                             const QString &arch,
+                                             const QString &hypervisor,
+                                             const QString &platform) const
+{
+    const AssetInfo *a = findNetTarAsset(version, arch, hypervisor, platform);
+    return a ? a->size : 0;
 }
 
 QString EveReleaseFetcher::isoDownloadUrl(const QString &version,

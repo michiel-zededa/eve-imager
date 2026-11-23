@@ -81,45 +81,53 @@ Item {
     property string saveFilePath: ""
     readonly property bool saveToFile: saveFilePath.length > 0
 
-    // A release usually has a raw image and an installer ISO. The raw image is
-    // what gets written to a drive; the ISO is what network (PXE) installation
-    // needs. While saveAsIso is set, the eve* properties below describe the
-    // ISO and eveRawSelection keeps what they were for the raw image.
-    property bool saveAsIso: false
+    // A release has a raw image, which is what gets written to a drive, and
+    // usually also an installer ISO and a network boot archive
+    // (installer-net.tar). Those two can be saved as a file instead:
+    // saveVariant is "iso" or "nettar" then, the eve* properties below
+    // describe that file, and eveRawSelection keeps what they were for the raw
+    // image. "" = the raw image.
+    property string saveVariant: ""
     property var eveRawSelection: null
-    // The installer ISO of the selected release ("" if it has none besides
-    // the selected image); set by the Version step
+    // Save the raw image zstd-compressed (.raw.zst)
+    property bool saveCompressed: false
+    // The other files of the selected release ("" if it has none); set by the Version step
     property string eveIsoUrl: ""
     property real eveIsoSize: 0
+    property string eveNetTarUrl: ""
+    property real eveNetTarSize: 0
 
-    function setIsoVariant(on, isoUrl, isoSize) {
-        if (on === root.saveAsIso)
+    function setSaveVariant(kind) {
+        if (kind === root.saveVariant)
             return
-        if (on) {
-            root.eveRawSelection = {
-                url: root.eveDownloadUrl, size: root.eveDownloadSize, compressed: root.eveIsCompressedImage,
-                imageSize: root.eveImageSize, osName: root.selectedOsName
-            }
-            root.eveDownloadUrl = isoUrl
-            root.eveDownloadSize = isoSize
-            root.eveIsCompressedImage = false
-            root.eveImageSize = isoSize
-            root.eveIsIsoImage = true
-            root.selectedOsName = qsTr("%1 (installer ISO)").arg(root.selectedOsName)
-            root.saveAsIso = true
-        } else {
-            var raw = root.eveRawSelection
-            root.saveAsIso = false
-            root.eveRawSelection = null
-            if (raw) {
-                root.eveDownloadUrl = raw.url
-                root.eveDownloadSize = raw.size
-                root.eveIsCompressedImage = raw.compressed
-                root.eveImageSize = raw.imageSize
-                root.eveIsIsoImage = false
-                root.selectedOsName = raw.osName
-            }
+        // Back to the raw image first
+        var raw = root.eveRawSelection
+        root.saveVariant = ""
+        root.eveRawSelection = null
+        if (raw) {
+            root.eveDownloadUrl = raw.url
+            root.eveDownloadSize = raw.size
+            root.eveIsCompressedImage = raw.compressed
+            root.eveImageSize = raw.imageSize
+            root.eveIsIsoImage = false
+            root.selectedOsName = raw.osName
         }
+        if (kind !== "iso" && kind !== "nettar")
+            return
+        root.eveRawSelection = {
+            url: root.eveDownloadUrl, size: root.eveDownloadSize, compressed: root.eveIsCompressedImage,
+            imageSize: root.eveImageSize, osName: root.selectedOsName
+        }
+        var url = kind === "iso" ? root.eveIsoUrl : root.eveNetTarUrl
+        var size = kind === "iso" ? root.eveIsoSize : root.eveNetTarSize
+        root.eveDownloadUrl = url
+        root.eveDownloadSize = size
+        root.eveIsCompressedImage = false
+        root.eveImageSize = size
+        // Neither takes the installer options: the Configuration step goes by this
+        root.eveIsIsoImage = true
+        root.selectedOsName = (kind === "iso" ? qsTr("%1 (installer ISO)") : qsTr("%1 (network boot archive)")).arg(root.selectedOsName)
+        root.saveVariant = kind
     }
 
     // ── Completion snapshot (used by DoneStep — all false for EVE imager) ──
@@ -149,7 +157,7 @@ Item {
     property double eveDownloadSize: 0        // download size in bytes (compressed size if eveIsCompressedImage; double avoids int32 overflow)
     property bool   eveIsCompressedImage: false // true = .raw.zst / legacy .img: eveDownloadSize is not the size written to the drive
     property double eveImageSize: 0           // size of the image as written to the drive, in bytes; 0 = not known
-    property bool   eveIsIsoImage: false      // true = installer ISO: no installer options, no FR201
+    property bool   eveIsIsoImage: false      // true = installer ISO or network boot archive: no installer options, no FR201
 
     // ── EVE device configuration ──────────────────────────────────────────
     // Keys as EveConfigurator (src/eveconfigurator.h) reads them
@@ -379,7 +387,8 @@ Item {
         invalidateStepsFrom(stepStorageSelection)
         selectedStorageName = ""
         saveFilePath = ""
-        saveAsIso = false
+        saveVariant = ""
+        saveCompressed = false
         eveRawSelection = null
         eveConfigured = false
     }

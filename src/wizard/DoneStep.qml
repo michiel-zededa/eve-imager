@@ -185,6 +185,8 @@ WizardStepBase {
             Layout.fillWidth: true
             text: !wizardContainer.saveToFile
                   ? qsTr("Boot the target device from this drive to install EVE-OS.")
+                  : wizardContainer.saveVariant === "nettar"
+                    ? qsTr("Use the file for network (PXE) installation. It already contains your configuration.")
                   : wizardContainer.eveIsIsoImage
                     ? qsTr("Use the file for network (PXE) installation, or write it to a drive later: choose \"Use local image file\" on the first page.")
                     : qsTr("To write it to a drive later, choose \"Use local image file\" on the first page. It already contains your configuration.")
