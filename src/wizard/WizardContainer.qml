@@ -154,8 +154,8 @@ Item {
         var c = root.eveConfig
         var parts = []
         if (c.controllerUrl)                parts.push(qsTr("Controller %1").arg(c.controllerUrl))
-        if (c.hardware === "fr201")         parts.push(qsTr("OnLogic FR201"))
-        if (c.hardware === "fr201-nvme")    parts.push(qsTr("OnLogic FR201 without eMMC"))
+        // c.hardware (OnLogic FR201) is chosen in the Platform list and shown
+        // with the image, not here
         if (c.bootstrapConfigPath) {
             parts.push(qsTr("Bootstrap config"))
         } else {
@@ -210,7 +210,6 @@ Item {
         if (c.softSerial)          names.push(qsTr("soft serial"))
         if (c.console)             names.push(qsTr("console"))
         if (c.rebootAfterInstall)  names.push(qsTr("reboot after install"))
-        if (c.hardware)            names.push(qsTr("hardware"))
         if (c.bootstrapConfigPath) names.push(qsTr("bootstrap config"))
         return names
     }

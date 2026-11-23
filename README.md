@@ -13,11 +13,12 @@ EVE Imager downloads EVE-OS releases directly from GitHub, lets you configure de
 - **Live release browser** — paginates all EVE-OS releases from [lf-edge/eve GitHub releases](https://github.com/lf-edge/eve/releases), showing the newest patch release of each LTS line, newest line first (17.0.x, 16.0.x, 14.5.x, …)
 - **LTS filter** — shows only releases tagged `X.Y.Z-lts`, and of each LTS line (`X.Y`) only the newest patch; if that newest patch was published without images for an architecture (e.g. arm64) that an older patch of the same line still has, the older patch is listed too; use the _Use local image file_ tab for non-LTS builds
 - **Cascading selection** — choose Version → Architecture → Hypervisor → Platform; only combinations that actually have installer assets are shown
+- **OnLogic FR201** — for arm64/kvm the Platform list also offers _OnLogic FR201_ and _OnLogic FR201 without eMMC_: the generic image with the FR201 boot configuration applied after writing
 - **Multi-format support** — handles `.installer.raw`, `.installer.raw.zst` (zstd-compressed), `.installer.img` (gzip-compressed, used by older EVE ≤12.x releases), and `.installer.iso`; compressed formats are decompressed on the fly while writing; when a release offers both `.installer.raw` and `.installer.raw.zst`, the smaller `.raw.zst` download is used; ISO images skip the config customization step
 - **Drive size check** — a compressed image unpacks to much more than its download size (the EVE-OS 17.0 installer images are ~400 MB to download but 8 GiB on the drive, so they need a 16 GB USB stick). The real size is read from the first bytes of the file when you pick a release; drives that are too small are marked in the storage list and cannot be selected
 - **Device configuration** — optionally pre-configure the device before writing (RAW images only), in a **Simple** or an **Advanced** view:
   - _Simple_: controller (the ZEDEDA clusters are suggested, any host name can be typed), WiFi, and _My network uses a proxy_ with the proxy's CA certificate for proxies that inspect encrypted traffic
-  - _Advanced_ adds: controller root certificate and onboarding certificate/key, network interfaces (DHCP or static, NTP servers, VLANs, management or not), proxy exceptions and PAC, several proxy CA certificates, install / `/persist` / wipe disks, soft serial number, console, auto-reboot, OnLogic FR201 boot configuration, an SSH key for the debug console, and a bootstrap config exported by the controller
+  - _Advanced_ adds: controller root certificate and onboarding certificate/key, network interfaces (DHCP or static, NTP servers, VLANs, management or not), proxy exceptions and PAC, several proxy CA certificates, install / `/persist` / wipe disks, soft serial number, console, auto-reboot, an SSH key for the debug console, and a bootstrap config exported by the controller
 - **Local image support** — bypass the GitHub release browser and write a locally downloaded `.raw` or `.iso` file instead
 - **Write + verify** — streams the download directly to the USB device and verifies the written data afterwards; the Write page shows the percentage, the amount written and the current stage
 - **Write again** — after a finished, cancelled or failed write you can write the same image to another drive, or go back and change the selection, without restarting the app
@@ -204,9 +205,9 @@ Notes:
 
 An existing `grub.cfg` on the partition is kept; the app's lines sit between `# >>> EVE Imager >>>` and `# <<< EVE Imager <<<` markers and are replaced on the next write.
 
-### Hardware: OnLogic FR201 (arm64 images)
+### OnLogic FR201 (Platform list, arm64/kvm)
 
-_Hardware → OnLogic FR201_ applies the [FR201 boot configuration](https://github.com/lf-edge/eve#fr201-boot-configuration) to `config.txt` on the EFI system partition: it disables the TPM overlay line and enables `include fr201.txt`. _OnLogic FR201 without eMMC_ also installs onto `sdb` (unless another install disk is set) and adds `rootdelay=10`. This needs EVE-OS 14.5 or later; older images have no FR201 support and the app says so.
+Choosing _OnLogic FR201_ as the platform downloads the generic arm64 image and, after writing, applies the [FR201 boot configuration](https://github.com/lf-edge/eve#fr201-boot-configuration) to `config.txt` on the EFI system partition: it disables the TPM overlay line and enables `include fr201.txt`. _OnLogic FR201 without eMMC_ also installs onto `sdb` (unless another install disk is set under Configuration → Advanced → Installation) and adds `rootdelay=10`. The two entries are offered for EVE-OS 14.5 and later with the kvm hypervisor, which is what EVE-OS supports on the FR201; they are not available for a local image file.
 
 ---
 

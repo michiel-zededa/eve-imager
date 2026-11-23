@@ -39,7 +39,6 @@ WizardStepBase {
     // A bootstrap config from the controller replaces the network settings
     readonly property bool bootstrapActive: cfg.bootstrapConfigPath.length > 0
     // FR201 is a Compute Module 4 board: arm64 only. A local file is not checked.
-    readonly property bool hardwareChoiceAvailable: wizardContainer.useLocalImage || wizardContainer.eveArch === "arm64"
     // Message from the last check of the settings; "" if they are fine
     property string configError: ""
 
@@ -969,11 +968,13 @@ WizardStepBase {
                     Field {
                         Layout.alignment: Qt.AlignTop
                         label: qsTr("Install EVE-OS on")
-                        hint: qsTr("Linux disk name, e.g. nvme0n1. Empty: the first free disk.")
+                        hint: root.cfg.hardware === "fr201-nvme"
+                              ? qsTr("Linux disk name. Empty: sdb, the NVMe drive of an OnLogic FR201 without eMMC.")
+                              : qsTr("Linux disk name, e.g. nvme0n1. Empty: the first free disk.")
                         ImTextField {
                             Layout.fillWidth: true
                             font.family: Style.fontFamilyMono
-                            placeholderText: qsTr("Chosen by the installer")
+                            placeholderText: root.cfg.hardware === "fr201-nvme" ? "sdb" : qsTr("Chosen by the installer")
                             inputMethodHints: Qt.ImhNoPredictiveText
                             Accessible.name: qsTr("Install disk")
                             text: root.cfg.installDisk
@@ -1061,34 +1062,6 @@ WizardStepBase {
 
             ImSection {
                 Layout.fillWidth: true
-                title: qsTr("Hardware")
-                summary: root.cfg.hardware === "fr201" ? qsTr("OnLogic FR201")
-                       : root.cfg.hardware === "fr201-nvme" ? qsTr("OnLogic FR201 without eMMC")
-                       : qsTr("Generic")
-                badge: root.badge(root.cfg.hardware ? 1 : 0)
-
-                Field {
-                    enabled: root.hardwareChoiceAvailable
-                    label: qsTr("Target device")
-                    hint: !root.hardwareChoiceAvailable
-                          ? qsTr("The OnLogic FR201 needs an arm64 image; the selected one is %1.").arg(root.wizardContainer.eveArch)
-                          : root.cfg.hardware === "fr201"
-                            ? qsTr("Sets up the boot files for the FR201. EVE-OS installs on the eMMC and keeps its data on the NVMe drive.")
-                          : root.cfg.hardware === "fr201-nvme"
-                            ? qsTr("Sets up the boot files for the FR201 and installs EVE-OS on the NVMe drive.")
-                          : qsTr("Most devices need nothing here. Some boards need changes to the boot files.")
-                    ImComboBox {
-                        Layout.fillWidth: true
-                        model: [qsTr("Generic"), qsTr("OnLogic FR201"), qsTr("OnLogic FR201 without eMMC")]
-                        currentIndex: root.cfg.hardware === "fr201" ? 1 : root.cfg.hardware === "fr201-nvme" ? 2 : 0
-                        Accessible.name: qsTr("Target device")
-                        onActivated: function(i) { root.setCfg("hardware", i === 1 ? "fr201" : i === 2 ? "fr201-nvme" : "") }
-                    }
-                }
-            }
-
-            ImSection {
-                Layout.fillWidth: true
                 title: qsTr("Device access")
                 summary: root.cfg.authorizedKeys ? qsTr("SSH key set") : qsTr("Not set")
                 badge: root.badge(root.cfg.authorizedKeys ? 1 : 0)
@@ -1156,9 +1129,6 @@ WizardStepBase {
             if (root.cfg.controllerUrl !== wanted)
                 root.setCfg("controllerUrl", wanted)
         }
-        // The FR201 choice only exists for arm64
-        if (!root.hardwareChoiceAvailable && root.cfg.hardware.length > 0)
-            root.setCfg("hardware", "")
         root.loadInterfaces()
     }
 }
