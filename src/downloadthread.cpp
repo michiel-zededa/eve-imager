@@ -47,6 +47,14 @@
 #include "curlnetworkconfig.h"
 #include "fastboot/sparse_encoder.h"  // isBlockZero()
 #include <QTemporaryDir>
+#include <QDir>
+#include <QFileInfo>
+#include <zstd.h>
+#include <cstdlib>
+#include <cstring>
+#ifdef Q_OS_LINUX
+#include <pwd.h>
+#endif
 
 using namespace std;
 
@@ -112,7 +120,10 @@ DownloadThread::~DownloadThread()
         _pendingHashFuture.waitForFinished();
         _hasPendingHash = false;
     }
-    
+
+    // Covers the app being closed while an image file is being saved
+    discardIncompleteImageFile();
+
     // Close unified file operations
     if (_file && _file->IsOpen()) {
         _file->Close();
@@ -188,8 +199,221 @@ QByteArray DownloadThread::_fileGetContentsTrimmed(const QString &filename)
     return result;
 }
 
+void DownloadThread::setDestinationIsFile(bool isFile)
+{
+    _dstIsFile = isFile;
+}
+
+/*
+ * Destination is an image file: create it (or empty an existing one) and open
+ * it the way a drive is opened. There is nothing to unmount, authorize or
+ * wipe, and direct I/O is left off, so the periodic sync keeps the amount of
+ * unwritten data small.
+ */
+void DownloadThread::setCompressedOutput(const QString &finalPath)
+{
+    _compressTo = finalPath;
+}
+
+bool DownloadThread::discardIncompleteImageFile()
+{
+    // Only once: a later write may create a file of the same name
+    if (!_dstIsFile || _imageFileComplete || _imageFileDiscarded)
+        return false;
+    _imageFileDiscarded = true;
+    _closeFiles();
+    if (!_compressTo.isEmpty())
+        QFile::remove(_compressTo + QStringLiteral(".part"));
+    return QFile::remove(QFile::decodeName(_filename));
+}
+
+/*
+ * Compress the finished image (the working file) to _compressTo.
+ *
+ * The frame gets the size of the image in its header, which is where this app
+ * (and zstd itself) reads how large a drive the image needs, and a checksum.
+ * The result is written under a temporary name and renamed at the end, so a
+ * file with the final name is always a complete one.
+ */
+bool DownloadThread::_compressImageFile()
+{
+    const QString rawPath = QFile::decodeName(_filename);
+    const QString partPath = _compressTo + QStringLiteral(".part");
+    const QString shownPath = QDir::toNativeSeparators(_compressTo);
+
+    QFile in(rawPath);
+    QFile out(partPath);
+    if (!in.open(QIODevice::ReadOnly))
+    {
+        emit error(tr("Cannot read the image to compress it: %1").arg(in.errorString()));
+        return false;
+    }
+    if (!out.open(QIODevice::WriteOnly | QIODevice::Truncate))
+    {
+        emit error(tr("Cannot create the image file '%1': %2").arg(shownPath, out.errorString()));
+        return false;
+    }
+
+    ZSTD_CCtx *cctx = ZSTD_createCCtx();
+    if (!cctx)
+    {
+        emit error(tr("Not enough memory to compress the image."));
+        return false;
+    }
+    const qint64 total = in.size();
+    ZSTD_CCtx_setParameter(cctx, ZSTD_c_compressionLevel, 3);
+    ZSTD_CCtx_setParameter(cctx, ZSTD_c_checksumFlag, 1);
+    // Several threads if the library was built with them; otherwise this is refused and one is used
+    ZSTD_CCtx_setParameter(cctx, ZSTD_c_nbWorkers, qBound(1, QThread::idealThreadCount() - 1, 4));
+    ZSTD_CCtx_setPledgedSrcSize(cctx, static_cast<unsigned long long>(total));
+
+    QByteArray inBuf(4 * 1024 * 1024, Qt::Uninitialized);
+    QByteArray outBuf(static_cast<int>(ZSTD_CStreamOutSize()), Qt::Uninitialized);
+    qint64 done = 0;
+    int shownPercent = -1;
+    QString failure;
+
+    while (failure.isEmpty())
+    {
+        if (_cancelled)
+        {
+            ZSTD_freeCCtx(cctx);
+            return false;
+        }
+        const qint64 got = in.read(inBuf.data(), inBuf.size());
+        if (got < 0)
+        {
+            failure = tr("Error reading the image to compress it: %1").arg(in.errorString());
+            break;
+        }
+        done += got;
+        const bool last = done >= total || got == 0;
+        ZSTD_inBuffer input = { inBuf.constData(), static_cast<size_t>(got), 0 };
+        bool flushed = false;
+        while (!flushed)
+        {
+            ZSTD_outBuffer output = { outBuf.data(), static_cast<size_t>(outBuf.size()), 0 };
+            const size_t remaining = ZSTD_compressStream2(cctx, &output, &input, last ? ZSTD_e_end : ZSTD_e_continue);
+            if (ZSTD_isError(remaining))
+            {
+                failure = tr("Error compressing the image: %1").arg(QString::fromLatin1(ZSTD_getErrorName(remaining)));
+                break;
+            }
+            if (output.pos > 0 && out.write(outBuf.constData(), static_cast<qint64>(output.pos)) != static_cast<qint64>(output.pos))
+            {
+                failure = tr("Error writing the image file '%1': %2").arg(shownPath, out.errorString());
+                break;
+            }
+            flushed = last ? remaining == 0 : input.pos == input.size;
+        }
+        const int percent = total > 0 ? static_cast<int>(done * 100 / total) : 100;
+        if (percent != shownPercent)
+        {
+            shownPercent = percent;
+            emit preparationStatusUpdate(tr("Compressing the image file... %1%").arg(percent));
+        }
+        if (last)
+            break;
+    }
+    ZSTD_freeCCtx(cctx);
+    in.close();
+
+    if (failure.isEmpty() && (!out.flush() || (out.close(), out.error() != QFileDevice::NoError)))
+        failure = tr("Error writing the image file '%1': %2").arg(shownPath, out.errorString());
+    if (!failure.isEmpty())
+    {
+        out.close();
+        emit error(failure);
+        return false;
+    }
+
+#ifdef Q_OS_LINUX
+    // As for the uncompressed file: it belongs to the person who started the app
+    QFileInfo rawInfo(rawPath);
+    if (::geteuid() == 0 && rawInfo.ownerId() != 0)
+    {
+        if (::chown(QFile::encodeName(partPath).constData(), rawInfo.ownerId(), rawInfo.groupId()) != 0)
+            qDebug() << "Could not change the owner of" << partPath << ":" << strerror(errno);
+    }
+#endif
+
+    QFile::remove(_compressTo);
+    if (!QFile::rename(partPath, _compressTo))
+    {
+        emit error(tr("Cannot create the image file '%1'.").arg(shownPath));
+        return false;
+    }
+    QFile::remove(rawPath);
+    return true;
+}
+
+bool DownloadThread::_openImageFile()
+{
+    QElapsedTimer openTimer;
+    openTimer.start();
+    emit preparationStatusUpdate(tr("Creating the image file..."));
+
+    const QString path = QFile::decodeName(_filename);
+    const QString shownPath = QDir::toNativeSeparators(path);
+    {
+        QFile f(path);
+        if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate))
+        {
+            emit error(tr("Cannot create the image file '%1': %2").arg(shownPath, f.errorString()));
+            return false;
+        }
+    }
+
+#ifdef Q_OS_LINUX
+    // The app runs as root to write drives. Give the file to the person who
+    // started it, or they could not move or delete it afterwards.
+    if (::geteuid() == 0)
+    {
+        const char *uidText = ::getenv("PKEXEC_UID");
+        if (!uidText)
+            uidText = ::getenv("SUDO_UID");
+        const uid_t uid = uidText ? static_cast<uid_t>(::strtoul(uidText, nullptr, 10)) : 0;
+        if (uid != 0)
+        {
+            const struct passwd *pw = ::getpwuid(uid);
+            if (::chown(_filename.constData(), uid, pw ? pw->pw_gid : static_cast<gid_t>(-1)) != 0)
+                qDebug() << "Could not change the owner of" << path << ":" << strerror(errno);
+        }
+    }
+#endif
+
+    if (_file->OpenDevice(_filename.toStdString()) != rpi_imager::FileError::kSuccess)
+    {
+        emit error(tr("Cannot open the image file '%1'.").arg(shownPath));
+        QFile::remove(path);
+        return false;
+    }
+
+    // Nothing to authorize, but this event also starts the progress watchdog
+    emit eventDriveAuthorization(0, true);
+
+    if (_debugAsyncIO && _file->IsAsyncIOSupported())
+    {
+        bool asyncConfigured = _file->SetAsyncQueueDepth(_debugAsyncQueueDepth);
+        qDebug() << "Async I/O:" << (asyncConfigured ? "configured" : "failed to configure")
+                 << "with queue depth" << _debugAsyncQueueDepth;
+    }
+
+#ifdef Q_OS_LINUX
+    _sectorsStart = _sectorsWritten();
+#endif
+
+    emit eventDriveOpen(static_cast<quint32>(openTimer.elapsed()), true,
+                        QStringLiteral("direct_io: no; destination: file; platform: %1")
+                            .arg(SystemMemoryManager::instance().getPlatformName()));
+    return true;
+}
+
 bool DownloadThread::_openAndPrepareDevice()
 {
+    if (_dstIsFile)
+        return _openImageFile();
+
     QElapsedTimer unmountTimer;
     QElapsedTimer openTimer;
     
@@ -1795,9 +2019,13 @@ void DownloadThread::_writeComplete()
     QThread::sleep(1);
 #endif
 
+    if (_dstIsFile && !_compressTo.isEmpty() && !_compressImageFile())
+        return;     // failed or cancelled: the files are removed when the thread ends
+
+    _imageFileComplete = true;
     emit success();
 
-    if (_ejectEnabled)
+    if (_ejectEnabled && !_dstIsFile)
     {
         // Use canonical device path for eject (e.g., /dev/disk on macOS, not rdisk)
         QString ejectPath = PlatformQuirks::getEjectDevicePath(_filename);

@@ -82,6 +82,20 @@ public:
     /* Set device to write to */
     Q_INVOKABLE void setDst(const QString &device, quint64 deviceSize = 0);
 
+    /*
+     * Save the image to this file instead of writing it to a drive.
+     * compressed: save it zstd-compressed (a .raw.zst).
+     */
+    Q_INVOKABLE void setDstFile(const QString &path, bool compressed = false);
+    /* True if the destination is an image file */
+    Q_INVOKABLE bool dstIsFile() const { return _dstIsFile; }
+    /* Folder to suggest for saving: the Downloads folder of the person using the app */
+    Q_INVOKABLE QString defaultSaveFolder() const;
+    /* Native "save as" dialog; "" if cancelled or if native dialogs are unavailable */
+    Q_INVOKABLE QString getNativeSaveFileName(const QString &title,
+                                              const QString &initialPath,
+                                              const QString &filter);
+
     /* Set verification enabled */
     Q_INVOKABLE void setVerifyEnabled(bool verify);
 
@@ -288,6 +302,12 @@ public:
 
     // EVE OS config injection — called from QML before startWrite()
     Q_INVOKABLE void setEveConfig(const QVariantMap &config);
+    /* Checks an EVE-OS configuration (reads the files it names, builds what
+       would be written). Returns "" if it is fine, else the message to show. */
+    Q_INVOKABLE QString eveConfigError(const QVariantMap &config);
+    /* What a certificate file holds, for display next to the file name:
+       { ok, error, subject, expires, expired, count } */
+    Q_INVOKABLE QVariantMap certificateInfo(const QString &path);
 
     // Customisation API
     Q_INVOKABLE void applyCustomisationFromSettings(const QVariantMap &settings);  // Main entry: generates scripts from settings
@@ -473,6 +493,11 @@ protected:
     quint64 _downloadLen, _extrLen, _devLen, _dlnow, _verifynow;
     DriveListModel _drivelist;
     bool _selectedDeviceValid;
+    bool _dstIsFile = false;
+    bool _dstFileCompressed = false;
+    void _setUpThreadDestination();
+    bool _dstCompressed() const;
+    QString _fileWritePath() const;
     WriteState _writeState;
     bool _cancelledDueToDeviceRemoval;
     HWListModel _hwlist;

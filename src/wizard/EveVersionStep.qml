@@ -82,7 +82,32 @@ WizardStepBase {
     // ── Cascading model arrays ─────────────────────────────────────────────
     property var archModel: []
     property var hvModel: []
-    property var platformModel: []
+    property var platformModel: []       // what the Platform list shows
+    // One entry per line of platformModel: { label, platform, hardware }.
+    // Most lines are a platform of the release. The OnLogic FR201 lines are
+    // the generic arm64 image plus a change to its boot files, which is made
+    // after writing (hardware: "fr201" | "fr201-nvme").
+    property var platformChoices: []
+
+    function _choice() {
+        var i = platformCombo.currentIndex
+        return (i >= 0 && i < root.platformChoices.length) ? root.platformChoices[i] : null
+    }
+
+    // The FR201 boot files are in EVE-OS 14.5 and later
+    function _hasFr201Files(version) {
+        var m = /^(\d+)\.(\d+)/.exec(version)
+        if (!m) return false
+        var major = parseInt(m[1]), minor = parseInt(m[2])
+        return major > 14 || (major === 14 && minor >= 5)
+    }
+
+    function _setHardware(hw) {
+        if (root.wizardContainer.eveConfig.hardware === hw) return
+        var c = Object.assign({}, root.wizardContainer.eveConfig)
+        c.hardware = hw
+        root.wizardContainer.eveConfig = c
+    }
 
     function _refreshArchModel() {
         var v = versionCombo.currentIndex >= 0 ? releaseFetcher.versions[versionCombo.currentIndex] : ""
@@ -108,20 +133,63 @@ WizardStepBase {
         var v = versionCombo.currentIndex >= 0 ? releaseFetcher.versions[versionCombo.currentIndex] : ""
         var a = archCombo.currentIndex >= 0 ? root.archModel[archCombo.currentIndex] : ""
         var h = hvCombo.currentIndex >= 0 ? root.hvModel[hvCombo.currentIndex] : ""
-        root.platformModel = (v.length > 0 && a.length > 0 && h.length > 0)
-                             ? releaseFetcher.platformsFor(v, a, h) : []
+        // Read the earlier choice first: filling the list below can already
+        // move the selection, which writes it back
         var savedPlatform = root.wizardContainer.evePlatform
-        var idx = root.platformModel.indexOf(savedPlatform)
-        platformCombo.currentIndex = (idx >= 0) ? idx : (root.platformModel.length > 0 ? 0 : -1)
-        // Eagerly sync all wizard state so the Writing step always sees fresh values
-        root._syncWizardDownloadState()
+        var savedHardware = root.wizardContainer.eveConfig.hardware || ""
+        var platforms = (v.length > 0 && a.length > 0 && h.length > 0)
+                        ? releaseFetcher.platformsFor(v, a, h) : []
+        var choices = []
+        for (var i = 0; i < platforms.length; i++) {
+            choices.push({ label: platforms[i], platform: platforms[i], hardware: "" })
+            // EVE-OS supports the FR201 with KVM only. The boot files are
+            // changed after writing, which only works for RAW images.
+            if (platforms[i] === "generic" && a === "arm64" && h === "kvm" && root._hasFr201Files(v)
+                    && !releaseFetcher.isIsoAsset(v, a, h, "generic")) {
+                choices.push({ label: qsTr("OnLogic FR201"), platform: "generic", hardware: "fr201" })
+                choices.push({ label: qsTr("OnLogic FR201 without eMMC"), platform: "generic", hardware: "fr201-nvme" })
+            }
+        }
+        root.platformChoices = choices
+        root.platformModel = choices.map(function(c) { return c.label })
+        var idx = -1
+        for (var j = 0; j < choices.length && idx < 0; j++)
+            if (choices[j].platform === savedPlatform && choices[j].hardware === savedHardware)
+                idx = j
+        if (idx < 0)
+            idx = platforms.indexOf(savedPlatform) >= 0
+                  ? choices.map(function(c) { return c.label }).indexOf(savedPlatform) : -1
+        platformCombo.currentIndex = (idx >= 0) ? idx : (choices.length > 0 ? 0 : -1)
+        // Keep the wizard state up to date so the Writing step sees fresh values
+        root._scheduleSync()
+    }
+
+    // The selection is written to the wizard once the lists have settled, not
+    // at every step in between. While a list is being filled (the step is
+    // opened again, or the releases are reloaded) the boxes pass through
+    // "first entry" states; written back at once, those replaced the earlier
+    // choice before it could be restored, so going back to this step lost the
+    // version, architecture and platform that had been chosen.
+    function _scheduleSync() {
+        Qt.callLater(root._syncWizardDownloadState)
     }
 
     function _syncWizardDownloadState() {
         var v = versionCombo.currentIndex >= 0 ? releaseFetcher.versions[versionCombo.currentIndex] : ""
         var a = archCombo.currentIndex >= 0 ? root.archModel[archCombo.currentIndex] : ""
         var h = hvCombo.currentIndex >= 0 ? root.hvModel[hvCombo.currentIndex] : ""
-        var p = platformCombo.currentIndex >= 0 ? root.platformModel[platformCombo.currentIndex] : ""
+        // The lists describe the release's preferred image. If its ISO had
+        // been chosen for saving, that choice ends here: pick the destination again.
+        if (root.wizardContainer.saveVariant.length > 0) {
+            root.wizardContainer.saveVariant = ""
+            root.wizardContainer.eveRawSelection = null
+            root.wizardContainer.saveFilePath = ""
+            root.wizardContainer.selectedStorageName = ""
+            root.imageWriter.setDst("")
+        }
+        var choice = root._choice()
+        var p = choice ? choice.platform : ""
+        root._setHardware(choice ? choice.hardware : "")
         root.wizardContainer.eveVersion      = v
         root.wizardContainer.eveArch         = a
         root.wizardContainer.eveHypervisor   = h
@@ -131,6 +199,12 @@ WizardStepBase {
         root.wizardContainer.eveDownloadSize = hasAll ? releaseFetcher.downloadSize(v, a, h, p) : 0
         root.wizardContainer.eveIsCompressedImage = hasAll ? releaseFetcher.isCompressedAsset(v, a, h, p) : false
         root.wizardContainer.eveIsIsoImage   = hasAll ? releaseFetcher.isIsoAsset(v, a, h, p) : false
+        // The release's installer ISO, offered for saving next to the raw image
+        var hasOtherIso = hasAll && !root.wizardContainer.eveIsIsoImage
+        root.wizardContainer.eveIsoUrl       = hasOtherIso ? releaseFetcher.isoDownloadUrl(v, a, h, p) : ""
+        root.wizardContainer.eveIsoSize      = hasOtherIso ? releaseFetcher.isoDownloadSize(v, a, h, p) : 0
+        root.wizardContainer.eveNetTarUrl    = hasAll ? releaseFetcher.netTarDownloadUrl(v, a, h, p) : ""
+        root.wizardContainer.eveNetTarSize   = hasAll ? releaseFetcher.netTarDownloadSize(v, a, h, p) : 0
         // Size the image takes on the drive. For uncompressed assets that is
         // the download size. For compressed ones it has to be read from the
         // file itself: use the value if we already have it and (re)start the
@@ -143,8 +217,10 @@ WizardStepBase {
         } else {
             root.wizardContainer.eveImageSize = root.wizardContainer.eveDownloadSize
         }
-        root.wizardContainer.selectedOsName  = hasAll
-                                               ? qsTr("EVE-OS %1 · %2/%3/%4").arg(v).arg(a).arg(h).arg(p) : ""
+        root.wizardContainer.selectedOsName  = !hasAll ? ""
+            : choice.hardware.length > 0
+              ? qsTr("EVE-OS %1 · %2/%3/%4 for %5").arg(v).arg(a).arg(h).arg(p).arg(choice.label)
+              : qsTr("EVE-OS %1 · %2/%3/%4").arg(v).arg(a).arg(h).arg(p)
     }
 
     // ── Content ────────────────────────────────────────────────────────────
@@ -292,7 +368,7 @@ WizardStepBase {
                                     enabled: !releaseFetcher.loading && count > 0
                                     displayText: currentIndex >= 0 ? currentText : qsTr("—")
                                     Accessible.name: qsTr("Platform")
-                                    onCurrentIndexChanged: root._syncWizardDownloadState()
+                                    onCurrentIndexChanged: root._scheduleSync()
                                 }
                             }
                         }
@@ -323,7 +399,8 @@ WizardStepBase {
                             readonly property string v: visible ? (releaseFetcher.versions[versionCombo.currentIndex] || "") : ""
                             readonly property string a: visible ? (root.archModel[archCombo.currentIndex] || "") : ""
                             readonly property string h: visible ? (root.hvModel[hvCombo.currentIndex] || "") : ""
-                            readonly property string p: visible ? (root.platformModel[platformCombo.currentIndex] || "") : ""
+                            readonly property var choice: visible ? root._choice() : null
+                            readonly property string p: choice ? choice.platform : ""
 
                             Rectangle {
                                 implicitWidth: Style.scaled(36)
@@ -368,8 +445,14 @@ WizardStepBase {
                                     text: {
                                         if (!assetPreview.visible) return ""
                                         var sz = releaseFetcher.downloadSize(assetPreview.v, assetPreview.a, assetPreview.h, assetPreview.p)
-                                        return sz > 0 ? qsTr("%1 GB download").arg((sz / (1024*1024*1024)).toFixed(2))
-                                                      : qsTr("Download")
+                                        var t = sz > 0 ? qsTr("%1 GB download").arg((sz / (1024*1024*1024)).toFixed(2))
+                                                       : qsTr("Download")
+                                        // The FR201 lines use the generic image: say what is done to it
+                                        if (assetPreview.choice && assetPreview.choice.hardware === "fr201")
+                                            t += " · " + qsTr("set up for the FR201")
+                                        else if (assetPreview.choice && assetPreview.choice.hardware === "fr201-nvme")
+                                            t += " · " + qsTr("set up for the FR201 without eMMC")
+                                        return t
                                     }
                                     font.family: Style.fontFamily
                                     font.pointSize: Style.fontSizeDescription
@@ -444,7 +527,7 @@ WizardStepBase {
                             ImTextField {
                                 id: localPathField
                                 Layout.fillWidth: true
-                                placeholderText: qsTr("Path to .raw or .iso image file…")
+                                placeholderText: qsTr("Path to a .raw, .raw.zst or .iso image file…")
                                 readOnly: true
                                 text: root.wizardContainer.eveLocalImagePath
                             }
@@ -456,8 +539,8 @@ WizardStepBase {
                         }
 
                         WizardDescriptionText {
-                            text: qsTr("Select an EVE-OS installer image you already downloaded (.raw or .iso). "
-                                       + "Configuration can be added to .raw images only.")
+                            text: qsTr("Select an EVE-OS installer image you already have: a raw image (.raw, .img, .raw.zst) "
+                                       + "or an installer ISO (.iso). This is also how you write an image saved earlier with this app.")
                             Layout.fillWidth: true
                             wrapMode: Text.WordWrap
                         }
@@ -475,7 +558,7 @@ WizardStepBase {
         parent: Overlay.overlay
         anchors.centerIn: parent
         title: qsTr("Select EVE-OS installer image")
-        nameFilters: ["EVE-OS installer images (*.raw *.iso)", "Raw disk images (*.raw)", "ISO images (*.iso)", "All files (*)"]
+        nameFilters: ["EVE-OS installer images (*.raw *.img *.raw.zst *.iso)", "Raw disk images (*.raw *.img *.raw.zst)", "ISO images (*.iso)", "All files (*)"]
         onAccepted: {
             var path = selectedFile.toString().replace(/^(file:\/{2,3})/, "")
             root.wizardContainer.eveLocalImagePath = path
@@ -486,6 +569,12 @@ WizardStepBase {
     }
 
     Component.onCompleted: {
+        // Releases loaded earlier are still listed when the step is opened
+        // again: show the version that was chosen
+        var saved = root.wizardContainer.eveVersion
+        var idx = saved.length > 0 ? releaseFetcher.versions.indexOf(saved) : -1
+        if (idx >= 0 && versionCombo.currentIndex !== idx)
+            versionCombo.currentIndex = idx
         releaseFetcher.fetchReleases()
     }
 
@@ -497,10 +586,16 @@ WizardStepBase {
             root._syncWizardDownloadState()
         } else {
             root.wizardContainer.useLocalImage   = true
+            root._setHardware("")   // the hardware choice belongs to the Platform list
             root.wizardContainer.eveDownloadUrl  = ""
             root.wizardContainer.eveDownloadSize = 0
             root.wizardContainer.eveIsCompressedImage = false
             root.wizardContainer.eveImageSize = 0   // local files are sized by the writer itself
+            root.wizardContainer.eveIsoUrl = ""
+            root.wizardContainer.eveIsoSize = 0
+            root.wizardContainer.eveNetTarUrl = ""
+            root.wizardContainer.eveNetTarSize = 0
+            root.wizardContainer.eveIsIsoImage = root.wizardContainer.eveLocalImagePath.toLowerCase().endsWith(".iso")
             root.wizardContainer.selectedOsName  = root.wizardContainer.eveLocalImagePath.length > 0
                 ? qsTr("Local image: %1").arg(root.wizardContainer.eveLocalImagePath.split("/").pop())
                 : ""

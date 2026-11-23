@@ -59,6 +59,13 @@ class EveReleaseFetcher : public QObject
         int              verMinor = -1;
         int              verPatch = -1;
         QList<AssetInfo> assets;
+        // The installer ISOs of the release, also for combinations whose
+        // preferred asset (in `assets`) is a raw image. An ISO is what network
+        // (PXE) installation needs.
+        QList<AssetInfo> isoAssets;
+        // The network boot archives (installer-net.tar): the installer ISO
+        // together with boot loader files, for network (PXE) installation.
+        QList<AssetInfo> netTarAssets;
     };
 
 public:
@@ -136,6 +143,30 @@ public:
                                     const QString &hypervisor,
                                     const QString &platform) const;
 
+    /**
+     * The installer ISO of this combination: its URL ("" if the release has
+     * none) and its size. A release usually has both a raw image, which is
+     * what gets written to a drive, and an ISO.
+     */
+    Q_INVOKABLE QString isoDownloadUrl(const QString &version,
+                                       const QString &arch,
+                                       const QString &hypervisor,
+                                       const QString &platform) const;
+    Q_INVOKABLE qint64 isoDownloadSize(const QString &version,
+                                       const QString &arch,
+                                       const QString &hypervisor,
+                                       const QString &platform) const;
+
+    /** The network boot archive (installer-net.tar) of this combination; "" / 0 if the release has none. */
+    Q_INVOKABLE QString netTarDownloadUrl(const QString &version,
+                                          const QString &arch,
+                                          const QString &hypervisor,
+                                          const QString &platform) const;
+    Q_INVOKABLE qint64 netTarDownloadSize(const QString &version,
+                                          const QString &arch,
+                                          const QString &hypervisor,
+                                          const QString &platform) const;
+
     /** Returns true if the asset for this combination is an ISO (not a raw image). */
     Q_INVOKABLE bool isIsoAsset(const QString &version,
                                 const QString &arch,
@@ -211,6 +242,14 @@ private:
                                const QString &arch,
                                const QString &hypervisor,
                                const QString &platform) const;
+    const AssetInfo *findIsoAsset(const QString &version,
+                                  const QString &arch,
+                                  const QString &hypervisor,
+                                  const QString &platform) const;
+    const AssetInfo *findNetTarAsset(const QString &version,
+                                     const QString &arch,
+                                     const QString &hypervisor,
+                                     const QString &platform) const;
 
     QList<ReleaseInfo> _releases;
     QHash<QString, qint64> _imageSizes;    // asset URL -> decompressed size, once probed

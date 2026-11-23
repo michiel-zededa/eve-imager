@@ -77,6 +77,58 @@ Item {
     property string selectedOsName: ""        // e.g. "EVE OS 12.5.0 amd64/kvm/generic"
     property string selectedStorageName: ""
     property string selectedDeviceName: selectedStorageName  // alias for DoneStep
+    // Set when the image is saved to a file instead of written to a drive
+    property string saveFilePath: ""
+    readonly property bool saveToFile: saveFilePath.length > 0
+
+    // A release has a raw image, which is what gets written to a drive, and
+    // usually also an installer ISO and a network boot archive
+    // (installer-net.tar). Those two can be saved as a file instead:
+    // saveVariant is "iso" or "nettar" then, the eve* properties below
+    // describe that file, and eveRawSelection keeps what they were for the raw
+    // image. "" = the raw image.
+    property string saveVariant: ""
+    property var eveRawSelection: null
+    // Save the raw image zstd-compressed (.raw.zst)
+    property bool saveCompressed: false
+    // The other files of the selected release ("" if it has none); set by the Version step
+    property string eveIsoUrl: ""
+    property real eveIsoSize: 0
+    property string eveNetTarUrl: ""
+    property real eveNetTarSize: 0
+
+    function setSaveVariant(kind) {
+        if (kind === root.saveVariant)
+            return
+        // Back to the raw image first
+        var raw = root.eveRawSelection
+        root.saveVariant = ""
+        root.eveRawSelection = null
+        if (raw) {
+            root.eveDownloadUrl = raw.url
+            root.eveDownloadSize = raw.size
+            root.eveIsCompressedImage = raw.compressed
+            root.eveImageSize = raw.imageSize
+            root.eveIsIsoImage = false
+            root.selectedOsName = raw.osName
+        }
+        if (kind !== "iso" && kind !== "nettar")
+            return
+        root.eveRawSelection = {
+            url: root.eveDownloadUrl, size: root.eveDownloadSize, compressed: root.eveIsCompressedImage,
+            imageSize: root.eveImageSize, osName: root.selectedOsName
+        }
+        var url = kind === "iso" ? root.eveIsoUrl : root.eveNetTarUrl
+        var size = kind === "iso" ? root.eveIsoSize : root.eveNetTarSize
+        root.eveDownloadUrl = url
+        root.eveDownloadSize = size
+        root.eveIsCompressedImage = false
+        root.eveImageSize = size
+        // Neither takes the installer options: the Configuration step goes by this
+        root.eveIsIsoImage = true
+        root.selectedOsName = (kind === "iso" ? qsTr("%1 (installer ISO)") : qsTr("%1 (network boot archive)")).arg(root.selectedOsName)
+        root.saveVariant = kind
+    }
 
     // ── Completion snapshot (used by DoneStep — all false for EVE imager) ──
     property var completionSnapshot: ({
@@ -105,42 +157,129 @@ Item {
     property double eveDownloadSize: 0        // download size in bytes (compressed size if eveIsCompressedImage; double avoids int32 overflow)
     property bool   eveIsCompressedImage: false // true = .raw.zst / legacy .img: eveDownloadSize is not the size written to the drive
     property double eveImageSize: 0           // size of the image as written to the drive, in bytes; 0 = not known
-    property bool   eveIsIsoImage: false      // true = ISO asset (no config customization)
+    property bool   eveIsIsoImage: false      // true = installer ISO or network boot archive: no installer options, no FR201
 
     // ── EVE device configuration ──────────────────────────────────────────
+    // Keys as EveConfigurator (src/eveconfigurator.h) reads them
     property var eveConfig: ({
-        controllerUrl:      "",
-        networkMode:        "dhcp",   // "dhcp" | "static"
-        staticIp:           "",
-        gateway:            "",
-        dns:                "",
-        proxyUrl:           "",
-        wifiSsid:           "",   // WiFi SSID
-        wifiPassword:       "",   // WiFi pre-shared key
-        rootCertPath:       "",   // root-certificate.pem (controller CA)
-        onboardCertPath:    "",   // onboard.cert.pem
-        onboardKeyPath:     "",   // onboard.key.pem
-        authorizedKeys:     "",   // authorized_keys (SSH public key text)
-        installDisk:        "",   // eve_install_disk grub param
-        persistDisk:        "",   // eve_persist_disk grub param
-        rebootAfterInstall: false // eve_reboot_after_install grub param
+        controllerUrl:      "",       // set to the default cluster when a release is chosen
+        rootCertPath:       "",       // controller root certificate (private CA)
+        onboardCertPath:    "",       // onboarding certificate
+        onboardKeyPath:     "",       // onboarding key
+        authorizedKeys:     "",       // SSH public key for the debug console
+        interfaces:         [],       // [{ ifName, mode, isMgmt, ip, gateway, dns, ntp, vlans: [{ tag, mode, isMgmt, ip, gateway, dns }] }]
+        wifiSsid:           "",
+        wifiPassword:       "",
+        proxyEnabled:       false,
+        proxyMethod:        "address", // how the device finds the proxy: address | wpad | pacUrl | pacFile
+        proxyAddress:       "",       // host:port
+        proxyExceptions:    "",
+        proxyPacUrl:        "",
+        proxyPacFilePath:   "",
+        proxyInspects:      false,    // encrypted traffic is inspected (by a proxy or a firewall)
+        proxyCertPaths:     [],       // CA certificates of whatever inspects the traffic
+        installDisk:        "",
+        persistDisk:        "",
+        nukeDisks:          "",
+        softSerial:         "",
+        console:            "",       // "" (image default) | "vga" | "serial"
+        rebootAfterInstall: false,
+        hardware:           "",       // "" | "fr201" | "fr201-nvme"
+        bootstrapConfigPath: ""       // bootstrap-config.pb from the controller
     })
+    // The controller clusters offered in the Configuration step
+    readonly property var eveKnownControllers: [
+        "zedcloud.zededa.net",
+        "zedcloud.gmwtus.zededa.net",
+        "zedcloud.pacteu.zededa.net"
+    ]
+    // "simple" | "advanced": how much the Configuration step shows. Saved.
+    property string eveConfigMode: "simple"
+    // False until the user edits the controller field: lets the step fill in
+    // the default cluster for a release, and leave a local image as it is.
+    property bool eveControllerTouched: false
     property bool eveConfigured: false
 
     // What the Configuration step adds to the drive, in one line (Write and Done pages)
     function eveConfigSummary() {
-        if (root.eveIsIsoImage)
-            return qsTr("Not applied (ISO image)")
         var c = root.eveConfig
         var parts = []
+        // An ISO takes everything except the installer options (see
+        // EveConfigurator): leave those out of the summary
+        var iso = root.eveIsIsoImage
         if (c.controllerUrl)                parts.push(qsTr("Controller %1").arg(c.controllerUrl))
-        if (c.networkMode === "static")     parts.push(c.staticIp ? qsTr("Static IP %1").arg(c.staticIp) : qsTr("Static IP"))
-        if (c.proxyUrl)                     parts.push(qsTr("HTTP proxy"))
-        if (c.wifiSsid)                     parts.push(qsTr("WiFi %1").arg(c.wifiSsid))
-        if (c.installDisk)                  parts.push(qsTr("Install disk %1").arg(c.installDisk))
-        if (c.persistDisk)                  parts.push(qsTr("/persist disk %1").arg(c.persistDisk))
-        if (c.rebootAfterInstall)           parts.push(qsTr("Reboot after install"))
+        // c.hardware (OnLogic FR201) is chosen in the Platform list and shown
+        // with the image, not here
+        if (c.bootstrapConfigPath) {
+            parts.push(qsTr("Bootstrap config"))
+        } else {
+            var ifaces = c.interfaces || []
+            for (var i = 0; i < ifaces.length; i++) {
+                var f = ifaces[i]
+                if (!f.ifName) continue
+                var t = f.ifName + " " + (f.mode === "static" ? (f.ip || qsTr("static")) : qsTr("DHCP"))
+                var vl = (f.vlans || []).filter(function(v) { return ("" + v.tag).length > 0 })
+                if (vl.length > 0)
+                    t += " " + qsTr("+ VLAN %1").arg(vl.map(function(v) { return v.tag }).join(", "))
+                parts.push(t)
+            }
+            if (c.wifiSsid)                 parts.push(qsTr("WiFi %1").arg(c.wifiSsid))
+            if (c.proxyEnabled) {
+                var m = c.proxyMethod || "address"
+                var p = m === "wpad" ? qsTr("Proxy by automatic discovery")
+                      : m === "pacUrl" || m === "pacFile" ? qsTr("Proxy by PAC script")
+                      : c.proxyAddress ? qsTr("Proxy %1").arg(c.proxyAddress) : qsTr("Proxy")
+                parts.push(p)
+            }
+            var n = c.proxyInspects ? (c.proxyCertPaths || []).length : 0
+            if (n > 0)
+                parts.push(n === 1 ? qsTr("Inspection CA certificate") : qsTr("%1 inspection CA certificates").arg(n))
+        }
+        if (c.rootCertPath)                 parts.push(qsTr("Controller root certificate"))
+        if (c.onboardCertPath)              parts.push(qsTr("Onboarding certificate"))
+        if (c.authorizedKeys)               parts.push(qsTr("SSH key"))
+        if (!iso) {
+            if (c.installDisk)              parts.push(qsTr("Install disk %1").arg(c.installDisk))
+            if (c.persistDisk)              parts.push(qsTr("/persist disk %1").arg(c.persistDisk))
+            if (c.nukeDisks)                parts.push(qsTr("Wipe %1").arg(c.nukeDisks))
+            if (c.softSerial)               parts.push(qsTr("Soft serial %1").arg(c.softSerial))
+            if (c.console === "serial")     parts.push(qsTr("Serial console"))
+            if (c.console === "vga")        parts.push(qsTr("Screen console"))
+            if (c.rebootAfterInstall)       parts.push(qsTr("Reboot after install"))
+        }
         return parts.length > 0 ? parts.join(" · ") : qsTr("None")
+    }
+
+    // The settings that only the Advanced view shows, as short names. The
+    // Simple view lists them so that nothing is applied unseen.
+    function eveAdvancedSettings() {
+        var c = root.eveConfig
+        var names = []
+        if ((c.interfaces || []).some(function(f) { return f.ifName }) && !c.bootstrapConfigPath)
+            names.push(qsTr("network interfaces"))
+        // (another way of finding the proxy than its address is shown in the Simple view itself)
+        if (c.proxyEnabled && (c.proxyMethod || "address") === "address" && c.proxyExceptions && !c.bootstrapConfigPath)
+            names.push(qsTr("proxy exceptions"))
+        if (c.proxyInspects && (c.proxyCertPaths || []).length > 1 && !c.bootstrapConfigPath)
+            names.push(qsTr("more inspection certificates"))
+        if (c.rootCertPath)        names.push(qsTr("controller root certificate"))
+        if (c.onboardCertPath)     names.push(qsTr("onboarding certificate"))
+        if (c.authorizedKeys)      names.push(qsTr("SSH key"))
+        if (!root.eveIsIsoImage) {
+            if (c.installDisk)         names.push(qsTr("install disk"))
+            if (c.persistDisk)         names.push(qsTr("/persist disk"))
+            if (c.nukeDisks)           names.push(qsTr("disks to wipe"))
+            if (c.softSerial)          names.push(qsTr("soft serial"))
+            if (c.console)             names.push(qsTr("console"))
+            if (c.rebootAfterInstall)  names.push(qsTr("reboot after install"))
+        }
+        if (c.bootstrapConfigPath) names.push(qsTr("bootstrap config"))
+        return names
+    }
+
+    function setEveConfigMode(mode) {
+        root.eveConfigMode = mode
+        root.imageWriter.setSetting("configMode", mode)
     }
 
     // "Write another" mode — skip straight to WritingStep after storage re-selection
@@ -178,6 +317,10 @@ Item {
             var savedTheme = imageWriter.getStringSetting("theme")
             if (savedTheme === "light" || savedTheme === "dark" || savedTheme === "system") {
                 Style.themeMode = savedTheme
+            }
+            // Restore how much the Configuration step shows
+            if (imageWriter.getStringSetting("configMode") === "advanced") {
+                eveConfigMode = "advanced"
             }
             // Restore persisted sidebar width
             var savedWidth = imageWriter.getStringSetting("sidebarWidth")
@@ -221,11 +364,6 @@ Item {
             writeAnotherMode = false
         }
 
-        // ISO images: skip the customization step — config cannot be applied to ISOs
-        if (next === stepEveCustomization && root.eveIsIsoImage) {
-            next = stepWriting
-        }
-
         markStepPermissible(next)
         forgetFinishedWrite(next)
         root.currentStep = next
@@ -236,11 +374,6 @@ Item {
     function previousStep() {
         if (root.currentStep <= 0) return
         var prev = root.currentStep - 1
-
-        // ISO images: skip back over the customization step
-        if (prev === stepEveCustomization && root.eveIsIsoImage) {
-            prev = stepStorageSelection
-        }
 
         forgetFinishedWrite(prev)
         root.currentStep = prev
@@ -259,6 +392,10 @@ Item {
     function invalidateVersionDependentSteps() {
         invalidateStepsFrom(stepStorageSelection)
         selectedStorageName = ""
+        saveFilePath = ""
+        saveVariant = ""
+        saveCompressed = false
+        eveRawSelection = null
         eveConfigured = false
     }
 
@@ -294,7 +431,7 @@ Item {
         anchors.fill: parent
         spacing: 0
 
-        // ── Top bar: ZEDEDA wordmark, product name, app-level actions ─────
+        // ── Top bar: ZEDEDA wordmark and app-level actions ─────
         Item {
             id: topBar
             Layout.fillWidth: true
@@ -322,16 +459,8 @@ Item {
                     Accessible.name: "ZEDEDA"
                 }
 
-                Text {
-                    text: qsTr("EVE Imager")
-                    font.family: Style.fontFamily
-                    font.pointSize: Style.fontSizeFormLabel
-                    font.weight: Style.fontWeightMedium
-                    color: Style.text
-                    Layout.leftMargin: Style.spacingMedium
-                    Layout.alignment: Qt.AlignVCenter
-                }
-
+                // The product name is in the window title and at the top of
+                // the sidebar; it is not repeated here
                 Item { Layout.fillWidth: true }
 
                 ImButton {
@@ -681,7 +810,8 @@ Item {
             imageWriter: root.imageWriter
             wizardContainer: root
             appOptionsButton: optionsButton
-            onNextClicked: root.nextStep()
+            // Only go on when the settings can be written as they are
+            onNextClicked: if (checkConfig()) root.nextStep()
             onBackClicked: root.previousStep()
         }
     }

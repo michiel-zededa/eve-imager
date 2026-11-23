@@ -16,7 +16,7 @@ WizardStepBase {
     required property ImageWriter imageWriter
     required property var wizardContainer
     
-    title: qsTr("Write complete")
+    title: wizardContainer.saveToFile ? qsTr("Save complete") : qsTr("Write complete")
     showBackButton: false
     showNextButton: false
     readonly property bool autoEjectEnabled: imageWriter.getBoolSetting("eject")
@@ -79,7 +79,7 @@ WizardStepBase {
 
                     Text {
                         id: choicesHeading
-                        text: qsTr("The installer drive is ready")
+                        text: wizardContainer.saveToFile ? qsTr("The image file is ready") : qsTr("The installer drive is ready")
                         font.pointSize: Style.fontSizeHeading
                         font.family: Style.fontFamily
                         font.weight: Style.fontWeightSemiBold
@@ -95,7 +95,10 @@ WizardStepBase {
 
                     Text {
                         id: ejectInstruction
-                        text: root.autoEjectEnabled ? qsTr("The storage device was ejected automatically. You can now remove it safely.") : qsTr("Please eject the storage device before removing it from your computer.")
+                        text: wizardContainer.saveToFile
+                              ? qsTr("Saved as %1").arg(wizardContainer.saveFilePath)
+                              : root.autoEjectEnabled ? qsTr("The storage device was ejected automatically. You can now remove it safely.")
+                                                      : qsTr("Please eject the storage device before removing it from your computer.")
                         font.pointSize: Style.fontSizeDescription
                         font.family: Style.fontFamily
                         color: Style.text
@@ -118,7 +121,7 @@ WizardStepBase {
             spacing: 0
 
             Text {
-                text: qsTr("Written")
+                text: wizardContainer.saveToFile ? qsTr("Saved") : qsTr("Written")
                 font.family: Style.fontFamily
                 font.pointSize: Style.fontSizeCaption
                 font.weight: Style.fontWeightSemiBold
@@ -156,12 +159,13 @@ WizardStepBase {
 
                 SummaryLabel {
                     id: storageLabel
-                    text: qsTr("Storage")
+                    text: wizardContainer.saveToFile ? qsTr("Saved to") : qsTr("Storage")
                     Accessible.name: text + ": " + storageValue.text
                 }
                 SummaryValue {
                     id: storageValue
-                    text: wizardContainer.selectedStorageName || CommonStrings.noStorageSelected
+                    text: wizardContainer.saveToFile ? wizardContainer.saveFilePath
+                                                     : (wizardContainer.selectedStorageName || CommonStrings.noStorageSelected)
                 }
 
                 SummaryLabel {
@@ -179,7 +183,13 @@ WizardStepBase {
         // Next step for the person holding the drive
         Text {
             Layout.fillWidth: true
-            text: qsTr("Boot the target device from this drive to install EVE-OS.")
+            text: !wizardContainer.saveToFile
+                  ? qsTr("Boot the target device from this drive to install EVE-OS.")
+                  : wizardContainer.saveVariant === "nettar"
+                    ? qsTr("Use the file for network (PXE) installation. It already contains your configuration.")
+                  : wizardContainer.eveIsIsoImage
+                    ? qsTr("Use the file for network (PXE) installation, or write it to a drive later: choose \"Use local image file\" on the first page.")
+                    : qsTr("To write it to a drive later, choose \"Use local image file\" on the first page. It already contains your configuration.")
             font.pointSize: Style.fontSizeDescription
             font.family: Style.fontFamily
             color: Style.muted

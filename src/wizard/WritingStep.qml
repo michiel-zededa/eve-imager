@@ -18,14 +18,19 @@ WizardStepBase {
     required property ImageWriter imageWriter
     required property var wizardContainer
 
-    title: qsTr("Write image")
+    // Saving to an image file instead of writing a drive: nothing is erased
+    readonly property bool saving: wizardContainer.saveToFile
+
+    title: root.saving ? qsTr("Save image") : qsTr("Write image")
     subtitle: {
         if (root.isWriting) {
-            return qsTr("Writing in progress. Do not disconnect the storage device.")
+            return root.saving ? qsTr("Saving in progress.")
+                               : qsTr("Writing in progress. Do not disconnect the storage device.")
         } else if (root.isComplete) {
-            return qsTr("Write complete")
+            return root.saving ? qsTr("Save complete") : qsTr("Write complete")
         } else {
-            return qsTr("Review your choices, then write the image to the storage device.")
+            return root.saving ? qsTr("Review your choices, then save the image file.")
+                               : qsTr("Review your choices, then write the image to the storage device.")
         }
     }
     nextButtonText: {
@@ -34,12 +39,12 @@ WizardStepBase {
             if (imageWriter.writeState === ImageWriter.Verifying) {
                 return qsTr("Skip verification")
             } else {
-                return qsTr("Cancel write")
+                return root.saving ? qsTr("Cancel") : qsTr("Cancel write")
             }
         } else if (root.isComplete) {
             return CommonStrings.continueText
         } else {
-            return qsTr("Write")
+            return root.saving ? qsTr("Save") : qsTr("Write")
         }
     }
     nextButtonAccessibleDescription: {
@@ -52,7 +57,8 @@ WizardStepBase {
         } else if (root.isComplete) {
             return qsTr("Continue to the completion screen")
         } else {
-            return qsTr("Begin writing the image to the storage device. All existing data will be erased.")
+            return root.saving ? qsTr("Begin saving the image file.")
+                               : qsTr("Begin writing the image to the storage device. All existing data will be erased.")
         }
     }
     backButtonAccessibleDescription: qsTr("Return to previous customization step")
@@ -100,12 +106,13 @@ WizardStepBase {
             return
         if (root.isIndeterminateProgress || total <= 0) {
             root.progressPercent = -1
-            progressText.text = qsTr("%1 written to the drive").arg(imageWriter.formatSize(now))
+            progressText.text = (root.saving ? qsTr("%1 written to the file") : qsTr("%1 written to the drive")).arg(imageWriter.formatSize(now))
         } else {
             var progress = (now / total) * 100
             progressBar.value = progress
             root.progressPercent = progress
-            progressText.text = qsTr("%1 of %2 written to the drive").arg(imageWriter.formatSize(now)).arg(imageWriter.formatSize(total))
+            progressText.text = (root.saving ? qsTr("%1 of %2 written to the file") : qsTr("%1 of %2 written to the drive"))
+                                .arg(imageWriter.formatSize(now)).arg(imageWriter.formatSize(total))
         }
     }
 
@@ -202,13 +209,14 @@ WizardStepBase {
 
                 SummaryLabel {
                     id: storageLabel
-                    text: qsTr("Storage")
-                    Accessible.name: text + ": " + (wizardContainer.selectedStorageName || CommonStrings.noStorageSelected)
+                    text: root.saving ? qsTr("Save to") : qsTr("Storage")
+                    Accessible.name: text + ": " + storageValue.text
                 }
 
                 MarqueeText {
                     id: storageValue
-                    text: wizardContainer.selectedStorageName || CommonStrings.noStorageSelected
+                    text: root.saving ? wizardContainer.saveFilePath
+                                      : (wizardContainer.selectedStorageName || CommonStrings.noStorageSelected)
                     font.pointSize: Style.fontSizeFormLabel
                     font.family: Style.fontFamily
                     color: Style.text
@@ -229,7 +237,7 @@ WizardStepBase {
                     font.family: Style.fontFamily
                     color: Style.text
                     wrapMode: Text.WordWrap
-                    maximumLineCount: 3
+                    maximumLineCount: 6
                     elide: Text.ElideRight
                     Layout.fillWidth: true
                     Accessible.ignored: true  // Read as part of the label
@@ -237,24 +245,67 @@ WizardStepBase {
             }
         }
 
-        // ISO notice — shown when writing an ISO (no config applied)
-        ImBanner {
-            id: isoNotice
-            Layout.fillWidth: true
-            kind: "warn"
-            visible: !root.isWriting && !root.isComplete && !root.hasFailed
-                     && root.wizardContainer.eveIsIsoImage
-            text: qsTr("ISO image: controller URL, network, and SSH settings cannot be "
-                       + "pre-configured on ISO installers. The image will boot as a plain "
-                       + "installer. Configure the device through the controller after installation.")
-        }
-
         // What happens next, before the write starts
         ImBanner {
             Layout.fillWidth: true
             kind: "neutral"
             visible: !root.isWriting && !root.isComplete && !root.hasFailed
-            text: qsTr("Writing erases everything on the storage device.")
+            text: root.saving ? qsTr("Nothing is erased. A file of the same name is replaced.")
+                              : qsTr("Writing erases everything on the storage device.")
+        }
+
+        // For people who take the ISO to a network boot server: what carries
+        // over, what is set there, and the one thing that gets replaced. Only
+        // when an installer ISO is saved as a file, never when writing a drive.
+        ImCard {
+            Layout.fillWidth: true
+            padding: Style.spacingSmallPlus
+            spacing: Style.spacingXSmall
+            visible: root.saving && root.wizardContainer.eveIsIsoImage
+                     && root.wizardContainer.saveVariant !== "nettar"
+                     && !root.isWriting && !root.isComplete && !root.hasFailed
+
+            Text {
+                text: qsTr("With EVE Netboot Installer")
+                font.family: Style.fontFamily
+                font.pointSize: Style.fontSizeDescription
+                font.weight: Style.fontWeightSemiBold
+                color: Style.text
+                Layout.fillWidth: true
+                Accessible.role: Accessible.Heading
+            }
+            Repeater {
+                model: [
+                    { icon: "check", tone: "ok",
+                      text: qsTr("Carried over: everything under Configuration, including proxy and inspection certificates.") },
+                    { icon: "sliders", tone: "muted",
+                      text: qsTr("Set in its boot menu: disks, soft serial, console and reboot. An ISO cannot hold these.") },
+                    { icon: "alert", tone: "warn",
+                      text: qsTr("Leave its Controller setting empty: a value there replaces the controller set here.") }
+                ]
+                RowLayout {
+                    id: netbootLine
+                    required property var modelData
+                    Layout.fillWidth: true
+                    spacing: Style.spacingSmall
+                    ImIcon {
+                        name: netbootLine.modelData.icon
+                        size: Style.scaled(15)
+                        color: netbootLine.modelData.tone === "ok" ? Style.ok
+                             : netbootLine.modelData.tone === "warn" ? Style.warn : Style.muted
+                        Layout.alignment: Qt.AlignTop
+                        Layout.topMargin: Style.scaled(1)
+                    }
+                    Text {
+                        text: netbootLine.modelData.text
+                        font.family: Style.fontFamily
+                        font.pointSize: Style.fontSizeDescription
+                        color: Style.text
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                    }
+                }
+            }
         }
 
         // Progress card
@@ -447,8 +498,9 @@ WizardStepBase {
                 imageWriter.cancelWrite()
             }
         } else if (!root.isComplete) {
-            // If warnings are disabled, skip the confirmation dialog
-            if (wizardContainer.disableWarnings) {
+            // The confirmation is about erasing a drive; saving a file erases
+            // nothing. If warnings are disabled, skip it as well.
+            if (root.saving || wizardContainer.disableWarnings) {
                 beginWriteDelay.start()
             } else {
                 // Open confirmation dialog before starting
@@ -732,12 +784,9 @@ WizardStepBase {
             var dlUrl = "https://github.com/lf-edge/eve/releases/download/" + cfg.eveVersion + "/" + assetName
             root.imageWriter.setSrc(dlUrl, 0, 0, "", false, "EVE-OS", cfg.selectedOsName)
         }
-        // Don't pass EVE config for ISO images — ISOs have no CONFIG partition
-        if (!cfg.eveIsIsoImage) {
-            root.imageWriter.setEveConfig(cfg.eveConfig)
-        } else {
-            root.imageWriter.setEveConfig({})
-        }
+        // For an installer ISO the writer puts the configuration into the
+        // ISO's config.img and leaves out what an ISO cannot take
+        root.imageWriter.setEveConfig(cfg.eveConfig)
         root._srcReady = true    // unblock the Write button binding
 
         // Register summary section as first focus group
