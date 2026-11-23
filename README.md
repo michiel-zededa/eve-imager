@@ -137,7 +137,7 @@ Build with CMake + Qt 6.9 or newer (MinGW kit) via the Qt Online Installer: `cma
 
 2. **Storage** — Select the target USB drive. Drives that are too small for the image, or read-only, are marked and cannot be selected. System drives are hidden unless you untick _Exclude system drives_. Double-check the device name and size before continuing: everything on the drive will be erased.
 
-   Instead of a drive you can save a file: **Save as image file…** saves the image with your configuration as a `.raw` file, which you can write later by choosing it under _Use local image file_. **Save as ISO for network install…** saves the release's installer ISO with your configuration; that is the format network (PXE) installation takes, for example with [eve-netboot-installer](https://github.com/michiel-zededa/eve-netboot-installer). Nothing is erased when saving, and a file that could not be completed is removed again.
+   Instead of a drive you can save a file: **Save as image file…** saves the image with your configuration as a `.raw` file, which you can write later by choosing it under _Use local image file_. **Save as ISO for network install…** saves the release's installer ISO with your configuration; that is the format network (PXE) installation takes. Nothing is erased when saving, and a file that could not be completed is removed again.
 
 3. **Configuration** _(optional)_ — The switch at the top right chooses the view; the app remembers it.
    - **Simple** asks only where the device connects: the controller (`zedcloud.zededa.net` by default), a WiFi network if there is no cable, and whether the site uses a proxy. For a proxy that inspects encrypted traffic, tick _The proxy inspects encrypted traffic_ and choose the proxy's CA certificate.
