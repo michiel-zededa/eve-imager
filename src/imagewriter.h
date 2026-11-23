@@ -288,6 +288,12 @@ public:
 
     // EVE OS config injection — called from QML before startWrite()
     Q_INVOKABLE void setEveConfig(const QVariantMap &config);
+    /* Checks an EVE-OS configuration (reads the files it names, builds what
+       would be written). Returns "" if it is fine, else the message to show. */
+    Q_INVOKABLE QString eveConfigError(const QVariantMap &config);
+    /* What a certificate file holds, for display next to the file name:
+       { ok, error, subject, expires, expired, count } */
+    Q_INVOKABLE QVariantMap certificateInfo(const QString &path);
 
     // Customisation API
     Q_INVOKABLE void applyCustomisationFromSettings(const QVariantMap &settings);  // Main entry: generates scripts from settings

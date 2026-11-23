@@ -232,6 +232,28 @@ void DeviceWrapperFatPartition::setFAT(uint32_t cluster, uint32_t value)
         setFAT32(cluster, value);
 }
 
+/* Mark `cluster` as the last one of its file.
+ * Each FAT type has its own entry size: writing a FAT16 or FAT32 marker into
+ * a FAT12 table overwrites the entries of other clusters. */
+void DeviceWrapperFatPartition::markEndOfChain(uint32_t cluster)
+{
+    if (_type == FAT12)
+        setFAT12(cluster, 0xFFF);
+    else if (_type == FAT16)
+        setFAT16(cluster, 0xFFFF);
+    else
+        setFAT32(cluster, 0xFFFFFFF);
+}
+
+bool DeviceWrapperFatPartition::isEndOfChain(uint32_t value) const
+{
+    if (_type == FAT12)
+        return value > 0xFF7;
+    if (_type == FAT16)
+        return value > 0xFFF7;
+    return value > 0xFFFFFF7;
+}
+
 uint32_t DeviceWrapperFatPartition::getFAT(uint32_t cluster)
 {
     if (_type == FAT12)
@@ -874,143 +896,35 @@ void DeviceWrapperFatPartition::writeFile(const QString &filename, const QByteAr
     int clustersNeeded = (contents.length() + _bytesPerCluster - 1) / _bytesPerCluster;
     struct dir_entry entry;
 
-    // Handle subdirectory paths (e.g., "EFI/boot/boot.img")
-    if (filename.contains("/")) {
-        QStringList parts = filename.split("/", Qt::SkipEmptyParts);
-        if (parts.size() < 2) {
-            qDebug() << "DeviceWrapperFatPartition::writeFile: invalid path" << filename;
-            throw std::runtime_error("Invalid file path");
-        }
-        
-        // Navigate to the subdirectory
-        QString dirName = parts[0];
+    // A path such as "DevicePortConfig/override.json": walk into each folder.
+    // openDir() and everything built on it then work inside that folder; the
+    // guard goes back to the root directory however this function is left.
+    struct DirGuard {
+        DeviceWrapperFatPartition *p;
+        ~DirGuard() { p->_dirFirstCluster = 0; }
+    } dirGuard{this};
+    _dirFirstCluster = 0;
+
+    const QStringList parts = filename.split("/", Qt::SkipEmptyParts);
+    if (parts.isEmpty())
+        throw std::runtime_error("Invalid file path");
+    for (int i = 0; i < parts.size() - 1; i++) {
         struct dir_entry dirEntry;
-        
-        if (!getDirEntry(dirName, &dirEntry)) {
-            qDebug() << "DeviceWrapperFatPartition::writeFile: directory not found:" << dirName;
-            throw std::runtime_error("Directory not found");
-        }
-        
-        if (!(dirEntry.DIR_Attr & ATTR_DIRECTORY)) {
-            qDebug() << "DeviceWrapperFatPartition::writeFile:" << dirName << "is not a directory";
-            throw std::runtime_error("Path component is not a directory");
-        }
-        
-        // Save current directory context
-        uint32_t savedRootDirCluster = _fat32_currentRootDirCluster;
-        QList<uint32_t> savedDirClusters = _currentDirClusters;
-        
-        // Switch to subdirectory
-        uint32_t dirCluster = (dirEntry.DIR_FstClusHI << 16) | dirEntry.DIR_FstClusLO;
-        _fat32_currentRootDirCluster = dirCluster;
-        _currentDirClusters.clear();
-        _currentDirClusters.append(dirCluster);
-        
-        // Get the file entry in subdirectory (create if doesn't exist)
-        QString fileNameOnly = parts[parts.size() - 1];
-        getDirEntry(fileNameOnly, &entry, true);
-        firstCluster = entry.DIR_FstClusLO;
+        if (!getDirEntry(parts[i], &dirEntry))
+            throw std::runtime_error(QString("Folder \"%1\" not found on the FAT partition").arg(parts[i]).toStdString());
+        if (!(dirEntry.DIR_Attr & ATTR_DIRECTORY))
+            throw std::runtime_error(QString("\"%1\" on the FAT partition is not a folder").arg(parts[i]).toStdString());
+        uint32_t dirCluster = dirEntry.DIR_FstClusLO;
         if (_type == FAT32)
-            firstCluster |= (entry.DIR_FstClusHI << 16);
-
-        if (firstCluster)
-            clusterList = getClusterChain(firstCluster);
-
-        if (clusterList.length() < clustersNeeded)
-        {
-            /* We need to allocate more clusters */
-            uint32_t lastCluster = 0;
-            int extraClustersNeeded = clustersNeeded - clusterList.length();
-
-            if (!clusterList.isEmpty())
-                lastCluster = clusterList.last();
-
-            for (int i = 0; i < extraClustersNeeded; i++)
-            {
-                lastCluster = allocateCluster(lastCluster);
-                clusterList.append(lastCluster);
-            }
-        }
-        else if (clusterList.length() > clustersNeeded)
-        {
-            /* We need to remove excess clusters */
-            int clustersToRemove = clusterList.length() - clustersNeeded;
-            uint32_t clusterToRemove = 0;
-            QByteArray zeroes(_bytesPerCluster, 0);
-
-            for (int i=0; i < clustersToRemove; i++)
-            {
-                clusterToRemove = clusterList.takeLast();
-
-                /* Zero out previous data in excess clusters,
-                   just in case someone wants to take a disk image later */
-                seekCluster(clusterToRemove);
-                write(zeroes.data(), zeroes.length());
-
-                /* Mark cluster available again in FAT */
-                setFAT(clusterToRemove, 0);
-            }
-            updateFSinfo(clustersToRemove, clusterToRemove);
-
-            if (!clusterList.isEmpty())
-            {
-                if (_type == FAT16)
-                    setFAT16(clusterList.last(), 0xFFFF);
-                else
-                    setFAT32(clusterList.last(), 0xFFFFFFF);
-            }
-        }
-
-        //qDebug() << "First cluster:" << firstCluster << "Clusters:" << clusterList;
-
-        /* Write file data */
-        for (uint32_t cluster : std::as_const(clusterList))
-        {
-            seekCluster(cluster);
-            write(contents.data()+pos, qMin((qsizetype)_bytesPerCluster, (qsizetype)(contents.length()-pos)));
-
-            pos += _bytesPerCluster;
-            if (pos >= contents.length())
-                break;
-        }
-
-        if (clustersNeeded && contents.length() % _bytesPerCluster)
-        {
-            /* Zero out last cluster tip */
-            uint32_t extraBytesAtEndOfCluster = _bytesPerCluster - (contents.length() % _bytesPerCluster);
-            if (extraBytesAtEndOfCluster)
-            {
-                QByteArray zeroes(extraBytesAtEndOfCluster, 0);
-                write(zeroes.data(), zeroes.length());
-            }
-        }
-
-        /* Update directory entry */
-        if (clusterList.isEmpty())
-            firstCluster = (_type == FAT16 ? 0xFFFF : 0xFFFFFFF);
-        else
-            firstCluster = clusterList.first();
-
-        entry.DIR_FstClusLO = (firstCluster & 0xFFFF);
-        entry.DIR_FstClusHI = (firstCluster >> 16);
-        entry.DIR_WrtDate = QDateToFATdate( QDate::currentDate() );
-        entry.DIR_WrtTime = QTimeToFATtime( QTime::currentTime() );
-        entry.DIR_LstAccDate = entry.DIR_WrtDate;
-        entry.DIR_FileSize = contents.length();
-        updateDirEntry(&entry);
-        
-        // Restore directory context
-        _fat32_currentRootDirCluster = savedRootDirCluster;
-        _currentDirClusters = savedDirClusters;
-        
-        qDebug() << "DeviceWrapperFatPartition::writeFile: wrote" << filename;
-        return;
+            dirCluster |= (dirEntry.DIR_FstClusHI << 16);
+        if (dirCluster < 2)
+            throw std::runtime_error("Corrupt file system. Folder without a cluster");
+        _dirFirstCluster = dirCluster;
     }
+    const QString leafName = parts.last();
 
-    // Simple case: file in root directory
-    qDebug() << "writeFile: writing file" << filename << "to root directory";
-    qDebug() << "writeFile: calling getDirEntry with createIfNotExist=true";
-    getDirEntry(filename, &entry, true);
+    qDebug() << "writeFile: writing file" << filename;
+    getDirEntry(leafName, &entry, true);
     qDebug() << "writeFile: getDirEntry returned, entry name:" << QByteArray((char*)entry.DIR_Name, 11).toHex(':');
     firstCluster = entry.DIR_FstClusLO;
     if (_type == FAT32)
@@ -1058,12 +972,7 @@ void DeviceWrapperFatPartition::writeFile(const QString &filename, const QByteAr
         updateFSinfo(clustersToRemove, clusterToRemove);
 
         if (!clusterList.isEmpty())
-        {
-            if (_type == FAT16)
-                setFAT16(clusterList.last(), 0xFFFF);
-            else
-                setFAT32(clusterList.last(), 0xFFFFFFF);
-        }
+            markEndOfChain(clusterList.last());
     }
 
     //qDebug() << "First cluster:" << firstCluster << "Clusters:" << clusterList;
@@ -1348,20 +1257,20 @@ void DeviceWrapperFatPartition::writeDirEntryAtCurrentPos(struct dir_entry *dirE
     //qDebug() << "Write new entry" << QByteArray((char *) dirEntry->DIR_Name, 11);
     write((char *) dirEntry, sizeof(*dirEntry));
 
-    if (_type == FAT32)
+    if (_dirIsClusterChain)
     {
         if ((pos()-_clusterOffset) % _bytesPerCluster == 0)
         {
             /* We reached the end of the cluster, allocate/seek to next cluster */
             uint32_t nextCluster = getFAT(_fat32_currentRootDirCluster);
 
-            if (nextCluster > 0xFFFFFF7)
+            if (isEndOfChain(nextCluster))
             {
                 nextCluster = allocateCluster(_fat32_currentRootDirCluster);
             }
 
             if (_currentDirClusters.contains(nextCluster))
-                throw std::runtime_error("Circular cluster references in FAT32 directory detected");
+                throw std::runtime_error("Circular cluster references in FAT directory detected");
             _currentDirClusters.append(nextCluster);
 
             _fat32_currentRootDirCluster = nextCluster;
@@ -1381,14 +1290,19 @@ void DeviceWrapperFatPartition::writeDirEntryAtCurrentPos(struct dir_entry *dirE
 
 void DeviceWrapperFatPartition::openDir()
 {
-    /* Seek to start of root directory */
-    if (_type == FAT12 || _type == FAT16)
+    /* Seek to the start of the current directory: the root, or the folder
+       writeFile() walked into. A folder is a chain of clusters on every FAT
+       type; the root directory is one only on FAT32, on FAT12/16 it is a
+       fixed area in front of the clusters. */
+    if (_dirFirstCluster == 0 && (_type == FAT12 || _type == FAT16))
     {
+        _dirIsClusterChain = false;
         seek(_fat16_firstRootDirSector * _bytesPerSector);
     }
     else
     {
-        _fat32_currentRootDirCluster = _fat32_firstRootDirCluster;
+        _dirIsClusterChain = true;
+        _fat32_currentRootDirCluster = _dirFirstCluster ? _dirFirstCluster : _fat32_firstRootDirCluster;
         seekCluster(_fat32_currentRootDirCluster);
         /* Keep track of directory clusters we seeked to, to be able
            to detect circular references */
@@ -1409,16 +1323,16 @@ bool DeviceWrapperFatPartition::readDir(struct dir_entry *result)
         return false;
     }
 
-    if (_type == FAT32)
+    if (_dirIsClusterChain)
     {
         if ((pos()-_clusterOffset) % _bytesPerCluster == 0)
         {
             /* We reached the end of the cluster, seek to next cluster */
             uint32_t nextCluster = getFAT(_fat32_currentRootDirCluster);
 
-            if (nextCluster > 0xFFFFFF7)
+            if (isEndOfChain(nextCluster))
             {
-                qDebug() << "Reached end of FAT32 root directory, but no end-of-directory marker found. Adding one in new cluster.";
+                qDebug() << "Reached end of FAT directory, but no end-of-directory marker found. Adding one in new cluster.";
                 nextCluster = allocateCluster(_fat32_currentRootDirCluster);
                 seekCluster(nextCluster);
                 QByteArray zeroes(_bytesPerCluster, 0);

@@ -57,6 +57,11 @@
 #include <QStringList>
 #include <QHostAddress>
 #include <QDateTime>
+#if QT_CONFIG(ssl)
+#include <QSslCertificate>
+#endif
+#include <stdexcept>
+#include "eveconfigurator.h"
 #include "curlfetcher.h"
 #include "rpibootthread.h"
 #include "fastbootflashthread.h"
@@ -3476,6 +3481,48 @@ bool ImageWriter::isSecureBootForcedByCliFlag() const
 void ImageWriter::setEveConfig(const QVariantMap &config)
 {
     _eveConfig = config;
+}
+
+QString ImageWriter::eveConfigError(const QVariantMap &config)
+{
+    return EveConfigurator::validate(config);
+}
+
+QVariantMap ImageWriter::certificateInfo(const QString &path)
+{
+    QVariantMap info;
+    info[QStringLiteral("ok")] = false;
+    if (path.trimmed().isEmpty())
+        return info;
+
+    QByteArray pem;
+    try {
+        pem = EveConfigurator::readCertificateAsPem(path, tr("certificate"));
+    } catch (const std::runtime_error &e) {
+        info[QStringLiteral("error")] = QString::fromStdString(e.what());
+        return info;
+    }
+    info[QStringLiteral("ok")] = true;
+
+    // Name and expiry are a courtesy: without a TLS back end in this build
+    // the list is empty and only the file name is shown.
+#if QT_CONFIG(ssl)
+    const QList<QSslCertificate> certs = QSslCertificate::fromData(pem, QSsl::Pem);
+    info[QStringLiteral("count")] = int(qMax<qsizetype>(1, certs.size()));
+    if (!certs.isEmpty()) {
+        const QSslCertificate &c = certs.first();
+        QString subject = c.subjectInfo(QSslCertificate::CommonName).join(QStringLiteral(", "));
+        if (subject.isEmpty())
+            subject = c.subjectInfo(QSslCertificate::Organization).join(QStringLiteral(", "));
+        info[QStringLiteral("subject")] = subject;
+        const QDateTime expiry = c.expiryDate();
+        if (expiry.isValid()) {
+            info[QStringLiteral("expires")] = QLocale().toString(expiry.date(), QLocale::LongFormat);
+            info[QStringLiteral("expired")] = expiry < QDateTime::currentDateTimeUtc();
+        }
+    }
+#endif
+    return info;
 }
 
 void ImageWriter::setImageCustomisation(const QByteArray &config, const QByteArray &cmdline, const QByteArray &firstrun, const QByteArray &cloudinit, const QByteArray &cloudinitNetwork, const ImageOptions::AdvancedOptions opts, const QByteArray &initFormat)

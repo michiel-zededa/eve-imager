@@ -12,9 +12,11 @@ Writes:
     src/icons/rpi-imager.ico            window icon (Qt resource)
     src/linux/icon/eve-imager.png       Linux, 256 px
     src/linux/icon/eve-imager-128.png   Linux, 128 px
+    src/icons/eve-wizard-image*.bmp     Windows installer, side panel (1x, 2x)
+    src/icons/eve-wizard-small*.bmp     Windows installer, header corner (1x, 2x)
 """
 import os
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
 NAVY = (0x15, 0x38, 0x4a, 255)
 WHITE = (255, 255, 255, 255)
@@ -47,6 +49,44 @@ def render(size, inset=0.0):
     return img.resize((size, size), Image.LANCZOS)
 
 
+def draw_z(d, x0, y0, u):
+    """The Z with its top-left corner at (x0, y0), u pixels per unit of its own
+    22.5 x 24.9 grid."""
+    def poly(points, colour):
+        d.polygon([(x0 + x * u, y0 + y * u) for x, y in points], fill=colour)
+    poly(DIAGONAL, TEAL)
+    poly(TOP, WHITE)
+    poly(BOTTOM, WHITE)
+
+
+def wizard_side(scale, font_path):
+    """Side panel of the Windows installer: 164 x 314 at 1x."""
+    ss = 4
+    w, h = 164 * scale * ss, 314 * scale * ss
+    img = Image.new("RGB", (w, h), NAVY[:3])
+    d = ImageDraw.Draw(img)
+    k = scale * ss
+    u = 3.2 * k                                  # Z is 72 px wide at 1x
+    draw_z(d, (w - 22.5 * u) / 2, 78 * k, u)
+    font = ImageFont.truetype(font_path, int(17 * k))
+    text = "EVE Imager"
+    tw = d.textlength(text, font=font)
+    d.text(((w - tw) / 2, 176 * k), text, font=font, fill=WHITE[:3])
+    d.rectangle([(w - 40 * k) / 2, 206 * k, (w + 40 * k) / 2, 209 * k], fill=TEAL[:3])
+    return img.resize((164 * scale, 314 * scale), Image.LANCZOS)
+
+
+def wizard_small(scale):
+    """Header corner of the Windows installer: 55 x 58 at 1x."""
+    ss = 8
+    w, h = 55 * scale * ss, 58 * scale * ss
+    img = Image.new("RGB", (w, h), NAVY[:3])
+    d = ImageDraw.Draw(img)
+    u = 1.25 * scale * ss                        # Z is 28 px wide at 1x
+    draw_z(d, (w - 22.5 * u) / 2, (h - 24.9167 * u) / 2, u)
+    return img.resize((55 * scale, 58 * scale), Image.LANCZOS)
+
+
 def main():
     here = os.path.dirname(os.path.abspath(__file__))
     linux = os.path.join(here, "..", "linux", "icon")
@@ -63,6 +103,12 @@ def main():
 
     render(256).save(os.path.join(linux, "eve-imager.png"))
     render(128).save(os.path.join(linux, "eve-imager-128.png"))
+
+    font = os.path.join(here, "..", "fonts", "Inter-SemiBold.ttf")
+    wizard_side(1, font).save(os.path.join(here, "eve-wizard-image.bmp"))
+    wizard_side(2, font).save(os.path.join(here, "eve-wizard-image-2x.bmp"))
+    wizard_small(1).save(os.path.join(here, "eve-wizard-small.bmp"))
+    wizard_small(2).save(os.path.join(here, "eve-wizard-small-2x.bmp"))
 
 
 if __name__ == "__main__":
