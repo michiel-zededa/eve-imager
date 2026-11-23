@@ -21,6 +21,12 @@
  *
  *   config.txt                      OnLogic FR201 boot configuration
  *
+ * An installer ISO has no CONFIG partition. It carries the same file system as
+ * a file, config.img, in its root directory, and the installer uses that. So
+ * for an ISO the files above go into config.img. Two things cannot be done for
+ * an ISO: the installer options (the boot loader reads grub.cfg only from a
+ * CONFIG partition) and the FR201 boot configuration.
+ *
  * Every function here throws std::runtime_error with a message meant for the
  * user when something that was asked for cannot be done.
  */
@@ -93,6 +99,12 @@ public:
     /* True if the configuration would change anything in the image. */
     static bool hasAnything(const QVariantMap &config);
 
+    /*
+     * The configuration without the settings that cannot be applied to an
+     * installer ISO (installer options, hardware).
+     */
+    static QVariantMap withoutIsoUnsupported(const QVariantMap &config);
+
     /* --- generators (also used by the tests) --- */
 
     /* DevicePortConfig/override.json, or empty if no network settings are set. */
@@ -116,6 +128,8 @@ public:
 
 private:
     static DeviceWrapperFatPartition *findPartition(DeviceWrapper &dw, bool efiSystem);
+    /* config.img in the root directory of an ISO 9660 image; nullptr if `dw` is not such an ISO. */
+    static DeviceWrapperFatPartition *findIsoConfigImage(DeviceWrapper &dw, bool *isIso = nullptr);
     static QByteArray readFileLimited(const QString &path, const QString &what, qint64 maxBytes);
 };
 

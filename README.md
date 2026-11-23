@@ -14,11 +14,12 @@ EVE Imager downloads EVE-OS releases directly from GitHub, lets you configure de
 - **LTS filter** — shows only releases tagged `X.Y.Z-lts`, and of each LTS line (`X.Y`) only the newest patch; if that newest patch was published without images for an architecture (e.g. arm64) that an older patch of the same line still has, the older patch is listed too; use the _Use local image file_ tab for non-LTS builds
 - **Cascading selection** — choose Version → Architecture → Hypervisor → Platform; only combinations that actually have installer assets are shown
 - **OnLogic FR201** — for arm64/kvm the Platform list also offers _OnLogic FR201_ and _OnLogic FR201 without eMMC_: the generic image with the FR201 boot configuration applied after writing
-- **Multi-format support** — handles `.installer.raw`, `.installer.raw.zst` (zstd-compressed), `.installer.img` (gzip-compressed, used by older EVE ≤12.x releases), and `.installer.iso`; compressed formats are decompressed on the fly while writing; when a release offers both `.installer.raw` and `.installer.raw.zst`, the smaller `.raw.zst` download is used; ISO images skip the config customization step
+- **Multi-format support** — handles `.installer.raw`, `.installer.raw.zst` (zstd-compressed), `.installer.img` (gzip-compressed, used by older EVE ≤12.x releases), and `.installer.iso`; compressed formats are decompressed on the fly while writing; when a release offers both `.installer.raw` and `.installer.raw.zst`, the smaller `.raw.zst` download is used
 - **Drive size check** — a compressed image unpacks to much more than its download size (the EVE-OS 17.0 installer images are ~400 MB to download but 8 GiB on the drive, so they need a 16 GB USB stick). The real size is read from the first bytes of the file when you pick a release; drives that are too small are marked in the storage list and cannot be selected
-- **Device configuration** — optionally pre-configure the device before writing (RAW images only), in a **Simple** or an **Advanced** view:
+- **Device configuration** — optionally pre-configure the device before writing, in a **Simple** or an **Advanced** view (an installer ISO takes everything except the installation options):
   - _Simple_: controller (the ZEDEDA clusters are suggested, any host name can be typed), WiFi, and _My network uses a proxy_ with the proxy's CA certificate for proxies that inspect encrypted traffic
   - _Advanced_ adds: controller root certificate and onboarding certificate/key, network interfaces (DHCP or static, NTP servers, VLANs, management or not), proxy exceptions and PAC, several proxy CA certificates, install / `/persist` / wipe disks, soft serial number, console, auto-reboot, an SSH key for the debug console, and a bootstrap config exported by the controller
+- **Save as a file** — instead of writing to a drive, save the image with your configuration: as a raw image to write later, or as the release's installer ISO for network (PXE) installation
 - **Local image support** — bypass the GitHub release browser and write a locally downloaded `.raw` or `.iso` file instead
 - **Write + verify** — streams the download directly to the USB device and verifies the written data afterwards; the Write page shows the percentage, the amount written and the current stage
 - **Write again** — after a finished, cancelled or failed write you can write the same image to another drive, or go back and change the selection, without restarting the app
@@ -136,13 +137,15 @@ Build with CMake + Qt 6.9 or newer (MinGW kit) via the Qt Online Installer: `cma
 
 2. **Storage** — Select the target USB drive. Drives that are too small for the image, or read-only, are marked and cannot be selected. System drives are hidden unless you untick _Exclude system drives_. Double-check the device name and size before continuing: everything on the drive will be erased.
 
-3. **Configuration** _(optional, RAW images only)_ — The switch at the top right chooses the view; the app remembers it.
+   Instead of a drive you can save a file: **Save as image file…** saves the image with your configuration as a `.raw` file, which you can write later by choosing it under _Use local image file_. **Save as ISO for network install…** saves the release's installer ISO with your configuration; that is the format network (PXE) installation takes, for example with [eve-netboot-installer](https://github.com/michiel-zededa/eve-netboot-installer). Nothing is erased when saving, and a file that could not be completed is removed again.
+
+3. **Configuration** _(optional)_ — The switch at the top right chooses the view; the app remembers it.
    - **Simple** asks only where the device connects: the controller (`zedcloud.zededa.net` by default), a WiFi network if there is no cable, and whether the site uses a proxy. For a proxy that inspects encrypted traffic, tick _The proxy inspects encrypted traffic_ and choose the proxy's CA certificate.
    - **Advanced** shows every setting in sections that open and close; a closed section says what is set in it.
    - Settings made in Advanced stay in effect when you switch back to Simple; Simple lists them so that nothing is applied unseen.
-   - **Next** checks the settings (addresses, certificate files, sizes) and says what to correct. Anything left empty uses the EVE-OS default. This step is skipped automatically for ISO images.
+   - **Next** checks the settings (addresses, certificate files, sizes) and says what to correct. Anything left empty uses the EVE-OS default. For an installer ISO the Installation section is switched off (see [Configuration details](#configuration-details)).
 
-4. **Write** — Review the summary (image, storage, configuration) and click **Write**, then confirm that the drive may be erased. EVE Imager downloads the image (if not using a local file), streams it to the USB drive, and verifies the result. **Cancel write** stops the write and returns to the summary. A notice is shown when writing an ISO to remind you that pre-configuration is not available.
+4. **Write** — Review the summary (image, storage, configuration) and click **Write**, then confirm that the drive may be erased. EVE Imager downloads the image (if not using a local file), streams it to the USB drive, and verifies the result. **Cancel write** stops the write and returns to the summary. When saving to a file the button reads **Save** and there is nothing to confirm.
 
 5. **Done** — The drive is ejected automatically (unless you turned that off under _App options_). Boot your target device from it, or choose **Write another** to write the same image to another drive.
 
@@ -159,7 +162,7 @@ EVE-OS publishes installer images for:
 | arm64 | kvm | generic, nvidia-jp5, nvidia-jp6, nvidia-jp7 |
 | arm64 | k | generic, nvidia-jp5, nvidia-jp6, nvidia-jp7 |
 
-> **Note:** ISO images can be written to USB as bootable installers, but device configuration (controller URL, network settings) cannot be applied — only `.raw` and `.raw.zst` images have a CONFIG partition.
+> **Note:** For a release that has both, the raw image is used for drives; its installer ISO is offered on the Storage step for saving. An ISO has no CONFIG partition: it carries the same file system as a file, `config.img`, and EVE Imager writes the configuration there. The installation options (disks, soft serial, console, reboot) and the OnLogic FR201 setup need the raw image.
 
 > **Note:** If a release is missing from the version list, it may be incorrectly marked as `prerelease=true` on GitHub. Ask the EVE team to correct the release — no code change is needed in EVE Imager.
 
@@ -167,7 +170,7 @@ EVE-OS publishes installer images for:
 
 ## Configuration details
 
-After writing the image, EVE Imager puts these files on the `CONFIG` FAT partition of the drive. Only files for settings you made are written.
+After writing the image, EVE Imager puts these files on the `CONFIG` FAT partition of the drive — or, for an installer ISO, into the `config.img` file inside the ISO, which the installer uses in the same way. Only files for settings you made are written.
 
 ### Controller and onboarding
 
@@ -202,6 +205,8 @@ Notes:
 | `eve_soft_serial=<serial>` | _Soft serial number_ — identifies the device at onboarding in place of the hardware serial. |
 | `eve_reboot_after_install` | _Reboot automatically after installation_. |
 | `console=…` | _Console_ — screen or serial port (`ttyS0`, 115200) as the main console. |
+
+Not for an installer ISO: the boot loader reads `grub.cfg` only from a CONFIG partition, so these options are left out there (with network installation, kernel parameters are set on the boot server).
 
 An existing `grub.cfg` on the partition is kept; the app's lines sit between `# >>> EVE Imager >>>` and `# <<< EVE Imager <<<` markers and are replaced on the next write.
 

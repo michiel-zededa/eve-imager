@@ -685,7 +685,85 @@ DeviceWrapperFatPartition *EveConfigurator::findPartition(DeviceWrapper &dw, boo
     return nullptr;
 }
 
+/*
+ * An ISO 9660 image has its primary volume descriptor in sector 16 (sectors
+ * are 2048 bytes): type 1, "CD001". The descriptor holds the directory record
+ * of the root directory at offset 156; a directory is a list of such records.
+ * A file is one run of sectors (EVE-OS builds its ISO without multi-extent
+ * files; a 5 MB file would not need them anyway).
+ */
+DeviceWrapperFatPartition *EveConfigurator::findIsoConfigImage(DeviceWrapper &dw, bool *isIso)
+{
+    if (isIso)
+        *isIso = false;
+
+    const quint64 sector = 2048;
+    unsigned char pvd[2048];
+    dw.pread(reinterpret_cast<char *>(pvd), sizeof(pvd), 16 * sector);
+    if (pvd[0] != 1 || memcmp(pvd + 1, "CD001", 5) != 0)
+        return nullptr;
+    if (isIso)
+        *isIso = true;
+
+    auto le32 = [](const unsigned char *p) {
+        return static_cast<quint32>(p[0]) | static_cast<quint32>(p[1]) << 8
+             | static_cast<quint32>(p[2]) << 16 | static_cast<quint32>(p[3]) << 24;
+    };
+    const quint32 dirSector = le32(pvd + 156 + 2);
+    const quint32 dirSize = le32(pvd + 156 + 10);
+    if (dirSector == 0 || dirSize == 0 || dirSize > 1024 * 1024) {
+        qDebug() << "EveConfigurator: ISO root directory looks wrong";
+        return nullptr;
+    }
+
+    QByteArray dir(static_cast<int>(dirSize), 0);
+    dw.pread(dir.data(), dirSize, dirSector * sector);
+    const unsigned char *d = reinterpret_cast<const unsigned char *>(dir.constData());
+
+    quint32 pos = 0;
+    while (pos + 34 <= dirSize) {
+        const quint32 len = d[pos];
+        if (len == 0) {
+            // Records do not cross sectors: the rest of this one is padding
+            pos = (pos / sector + 1) * sector;
+            continue;
+        }
+        if (len < 34 || pos + len > dirSize)
+            break;
+        const unsigned char *rec = d + pos;
+        const bool isDirectory = rec[25] & 0x02;
+        const quint32 nameLen = rec[32];
+        if (!isDirectory && 33 + nameLen <= len) {
+            // "CONFIG.IMG;1": upper case, with a version number
+            QByteArray name(reinterpret_cast<const char *>(rec + 33), static_cast<int>(nameLen));
+            const int semicolon = name.indexOf(';');
+            if (semicolon >= 0)
+                name.truncate(semicolon);
+            if (name.toLower() == "config.img") {
+                const quint64 start = static_cast<quint64>(le32(rec + 2)) * sector;
+                const quint64 size = le32(rec + 10);
+                qDebug() << "EveConfigurator: found config.img in the ISO at byte" << start << "len" << size;
+                if (size < 64 * 1024)
+                    return nullptr;
+                return new DeviceWrapperFatPartition(&dw, start, size);
+            }
+        }
+        pos += len;
+    }
+    qDebug() << "EveConfigurator: no config.img in the root directory of the ISO";
+    return nullptr;
+}
+
 // ── Entry points ──────────────────────────────────────────────────────────────
+
+QVariantMap EveConfigurator::withoutIsoUnsupported(const QVariantMap &config)
+{
+    QVariantMap c = config;
+    for (const char *key : { "installDisk", "persistDisk", "nukeDisks", "softSerial", "console", "hardware" })
+        c.remove(QString::fromLatin1(key));
+    c.remove(QStringLiteral("rebootAfterInstall"));
+    return c;
+}
 
 bool EveConfigurator::hasAnything(const QVariantMap &config)
 {
@@ -805,8 +883,13 @@ QString EveConfigurator::validate(const QVariantMap &config)
     return QString();
 }
 
-bool EveConfigurator::apply(DeviceWrapper &dw, const QVariantMap &config)
+bool EveConfigurator::apply(DeviceWrapper &dw, const QVariantMap &givenConfig)
 {
+    // An installer ISO keeps its configuration in a file, config.img
+    bool isIso = false;
+    std::unique_ptr<DeviceWrapperFatPartition> isoConfig(findIsoConfigImage(dw, &isIso));
+    const QVariantMap config = isIso ? withoutIsoUnsupported(givenConfig) : givenConfig;
+
     if (!hasAnything(config))
         return false;
 
@@ -817,7 +900,10 @@ bool EveConfigurator::apply(DeviceWrapper &dw, const QVariantMap &config)
                                       || !p.authorizedKeys.isEmpty() || !p.overrideJson.isEmpty()
                                       || !p.grubBlock.isEmpty() || !p.bootstrap.isEmpty();
     if (needsConfigPartition) {
-        std::unique_ptr<DeviceWrapperFatPartition> fat(findPartition(dw, false));
+        std::unique_ptr<DeviceWrapperFatPartition> fat(isIso ? isoConfig.release() : findPartition(dw, false));
+        if (!fat && isIso)
+            fail(tr("The image was written, but this ISO has no config.img, so the configuration could not be added. "
+                    "EVE-OS installer ISOs have one."));
         if (!fat)
             fail(tr("The image was written, but it has no CONFIG partition, so the configuration could not be added. "
                     "EVE-OS installer images in .raw format have one."));

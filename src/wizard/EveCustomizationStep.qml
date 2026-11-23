@@ -37,6 +37,8 @@ WizardStepBase {
     readonly property var cfg: wizardContainer.eveConfig
     readonly property bool advanced: wizardContainer.eveConfigMode === "advanced"
     // A bootstrap config from the controller replaces the network settings
+    // An installer ISO takes the configuration, but not the installer options
+    readonly property bool isIso: wizardContainer.eveIsIsoImage
     readonly property bool bootstrapActive: cfg.bootstrapConfigPath.length > 0
     // FR201 is a Compute Module 4 board: arm64 only. A local file is not checked.
     // Message from the last check of the settings; "" if they are fine
@@ -958,9 +960,11 @@ WizardStepBase {
             ImSection {
                 Layout.fillWidth: true
                 title: qsTr("Installation")
-                summary: root.installationSummary()
-                badge: root.badge(root.countSet([root.cfg.installDisk, root.cfg.persistDisk, root.cfg.nukeDisks,
-                                                 root.cfg.softSerial, root.cfg.console, root.cfg.rebootAfterInstall]))
+                enabled: !root.isIso
+                summary: root.isIso ? qsTr("Not available for an installer ISO") : root.installationSummary()
+                badge: root.isIso ? "" : root.badge(root.countSet([root.cfg.installDisk, root.cfg.persistDisk, root.cfg.nukeDisks,
+                                                                   root.cfg.softSerial, root.cfg.console, root.cfg.rebootAfterInstall]))
+                onEnabledChanged: if (!enabled) expanded = false
 
                 RowLayout {
                     Layout.fillWidth: true

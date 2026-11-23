@@ -283,6 +283,7 @@ int EveReleaseFetcher::parseReleases(const QByteArray &json)
 
         // Collect installer assets (.raw preferred, .iso as fallback)
         QList<AssetInfo> assets;
+        QList<AssetInfo> isoAssets;
         const QJsonArray assetArr = ro["assets"].toArray();
         for (const QJsonValue &av : assetArr) {
             QJsonObject ao = av.toObject();
@@ -335,6 +336,9 @@ int EveReleaseFetcher::parseReleases(const QByteArray &json)
             if (asset.size > 0 && asset.size < MIN_INSTALLER_BYTES)
                 continue;
 
+            if (isIso)
+                isoAssets.append(asset);
+
             // Priority: .raw.zst (1) > .raw / legacy .img (2) > .iso (3)
             // For each arch/hv/platform combo keep only the highest-priority asset.
             // The zstd-compressed raw image is preferred over the plain one: it is
@@ -376,6 +380,7 @@ int EveReleaseFetcher::parseReleases(const QByteArray &json)
             rel.verPatch = ltsMatch.captured(3).toInt();
         }
         rel.assets      = assets;
+        rel.isoAssets   = isoAssets;
         _releases.append(rel);
     }
 
@@ -513,6 +518,40 @@ EveReleaseFetcher::findAsset(const QString &version,
         break;
     }
     return nullptr;
+}
+
+const EveReleaseFetcher::AssetInfo *
+EveReleaseFetcher::findIsoAsset(const QString &version,
+                                const QString &arch,
+                                const QString &hypervisor,
+                                const QString &platform) const
+{
+    for (const ReleaseInfo &r : _releases) {
+        if (r.version != version) continue;
+        for (const AssetInfo &a : r.isoAssets)
+            if (a.arch == arch && a.hypervisor == hypervisor && a.platform == platform)
+                return &a;
+        break;
+    }
+    return nullptr;
+}
+
+QString EveReleaseFetcher::isoDownloadUrl(const QString &version,
+                                          const QString &arch,
+                                          const QString &hypervisor,
+                                          const QString &platform) const
+{
+    const AssetInfo *a = findIsoAsset(version, arch, hypervisor, platform);
+    return a ? a->downloadUrl : QString();
+}
+
+qint64 EveReleaseFetcher::isoDownloadSize(const QString &version,
+                                          const QString &arch,
+                                          const QString &hypervisor,
+                                          const QString &platform) const
+{
+    const AssetInfo *a = findIsoAsset(version, arch, hypervisor, platform);
+    return a ? a->size : 0;
 }
 
 QString EveReleaseFetcher::downloadUrl(const QString &version,

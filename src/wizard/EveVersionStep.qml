@@ -178,6 +178,15 @@ WizardStepBase {
         var v = versionCombo.currentIndex >= 0 ? releaseFetcher.versions[versionCombo.currentIndex] : ""
         var a = archCombo.currentIndex >= 0 ? root.archModel[archCombo.currentIndex] : ""
         var h = hvCombo.currentIndex >= 0 ? root.hvModel[hvCombo.currentIndex] : ""
+        // The lists describe the release's preferred image. If its ISO had
+        // been chosen for saving, that choice ends here: pick the destination again.
+        if (root.wizardContainer.saveAsIso) {
+            root.wizardContainer.saveAsIso = false
+            root.wizardContainer.eveRawSelection = null
+            root.wizardContainer.saveFilePath = ""
+            root.wizardContainer.selectedStorageName = ""
+            root.imageWriter.setDst("")
+        }
         var choice = root._choice()
         var p = choice ? choice.platform : ""
         root._setHardware(choice ? choice.hardware : "")
@@ -190,6 +199,10 @@ WizardStepBase {
         root.wizardContainer.eveDownloadSize = hasAll ? releaseFetcher.downloadSize(v, a, h, p) : 0
         root.wizardContainer.eveIsCompressedImage = hasAll ? releaseFetcher.isCompressedAsset(v, a, h, p) : false
         root.wizardContainer.eveIsIsoImage   = hasAll ? releaseFetcher.isIsoAsset(v, a, h, p) : false
+        // The release's installer ISO, offered for saving next to the raw image
+        var hasOtherIso = hasAll && !root.wizardContainer.eveIsIsoImage
+        root.wizardContainer.eveIsoUrl       = hasOtherIso ? releaseFetcher.isoDownloadUrl(v, a, h, p) : ""
+        root.wizardContainer.eveIsoSize      = hasOtherIso ? releaseFetcher.isoDownloadSize(v, a, h, p) : 0
         // Size the image takes on the drive. For uncompressed assets that is
         // the download size. For compressed ones it has to be read from the
         // file itself: use the value if we already have it and (re)start the
@@ -576,6 +589,8 @@ WizardStepBase {
             root.wizardContainer.eveDownloadSize = 0
             root.wizardContainer.eveIsCompressedImage = false
             root.wizardContainer.eveImageSize = 0   // local files are sized by the writer itself
+            root.wizardContainer.eveIsoUrl = ""
+            root.wizardContainer.eveIsoSize = 0
             root.wizardContainer.eveIsIsoImage = root.wizardContainer.eveLocalImagePath.toLowerCase().endsWith(".iso")
             root.wizardContainer.selectedOsName  = root.wizardContainer.eveLocalImagePath.length > 0
                 ? qsTr("Local image: %1").arg(root.wizardContainer.eveLocalImagePath.split("/").pop())

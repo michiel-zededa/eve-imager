@@ -245,18 +245,6 @@ WizardStepBase {
             }
         }
 
-        // ISO notice — shown when writing an ISO (no config applied)
-        ImBanner {
-            id: isoNotice
-            Layout.fillWidth: true
-            kind: "warn"
-            visible: !root.isWriting && !root.isComplete && !root.hasFailed
-                     && root.wizardContainer.eveIsIsoImage
-            text: qsTr("ISO image: controller URL, network, and SSH settings cannot be "
-                       + "pre-configured on ISO installers. The image will boot as a plain "
-                       + "installer. Configure the device through the controller after installation.")
-        }
-
         // What happens next, before the write starts
         ImBanner {
             Layout.fillWidth: true
@@ -742,12 +730,9 @@ WizardStepBase {
             var dlUrl = "https://github.com/lf-edge/eve/releases/download/" + cfg.eveVersion + "/" + assetName
             root.imageWriter.setSrc(dlUrl, 0, 0, "", false, "EVE-OS", cfg.selectedOsName)
         }
-        // Don't pass EVE config for ISO images — ISOs have no CONFIG partition
-        if (!cfg.eveIsIsoImage) {
-            root.imageWriter.setEveConfig(cfg.eveConfig)
-        } else {
-            root.imageWriter.setEveConfig({})
-        }
+        // For an installer ISO the writer puts the configuration into the
+        // ISO's config.img and leaves out what an ISO cannot take
+        root.imageWriter.setEveConfig(cfg.eveConfig)
         root._srcReady = true    // unblock the Write button binding
 
         // Register summary section as first focus group

@@ -81,6 +81,47 @@ Item {
     property string saveFilePath: ""
     readonly property bool saveToFile: saveFilePath.length > 0
 
+    // A release usually has a raw image and an installer ISO. The raw image is
+    // what gets written to a drive; the ISO is what network (PXE) installation
+    // needs. While saveAsIso is set, the eve* properties below describe the
+    // ISO and eveRawSelection keeps what they were for the raw image.
+    property bool saveAsIso: false
+    property var eveRawSelection: null
+    // The installer ISO of the selected release ("" if it has none besides
+    // the selected image); set by the Version step
+    property string eveIsoUrl: ""
+    property real eveIsoSize: 0
+
+    function setIsoVariant(on, isoUrl, isoSize) {
+        if (on === root.saveAsIso)
+            return
+        if (on) {
+            root.eveRawSelection = {
+                url: root.eveDownloadUrl, size: root.eveDownloadSize, compressed: root.eveIsCompressedImage,
+                imageSize: root.eveImageSize, osName: root.selectedOsName
+            }
+            root.eveDownloadUrl = isoUrl
+            root.eveDownloadSize = isoSize
+            root.eveIsCompressedImage = false
+            root.eveImageSize = isoSize
+            root.eveIsIsoImage = true
+            root.selectedOsName = qsTr("%1 (installer ISO)").arg(root.selectedOsName)
+            root.saveAsIso = true
+        } else {
+            var raw = root.eveRawSelection
+            root.saveAsIso = false
+            root.eveRawSelection = null
+            if (raw) {
+                root.eveDownloadUrl = raw.url
+                root.eveDownloadSize = raw.size
+                root.eveIsCompressedImage = raw.compressed
+                root.eveImageSize = raw.imageSize
+                root.eveIsIsoImage = false
+                root.selectedOsName = raw.osName
+            }
+        }
+    }
+
     // ── Completion snapshot (used by DoneStep — all false for EVE imager) ──
     property var completionSnapshot: ({
         customizationSupported: false,
@@ -108,7 +149,7 @@ Item {
     property double eveDownloadSize: 0        // download size in bytes (compressed size if eveIsCompressedImage; double avoids int32 overflow)
     property bool   eveIsCompressedImage: false // true = .raw.zst / legacy .img: eveDownloadSize is not the size written to the drive
     property double eveImageSize: 0           // size of the image as written to the drive, in bytes; 0 = not known
-    property bool   eveIsIsoImage: false      // true = ISO asset (no config customization)
+    property bool   eveIsIsoImage: false      // true = installer ISO: no installer options, no FR201
 
     // ── EVE device configuration ──────────────────────────────────────────
     // Keys as EveConfigurator (src/eveconfigurator.h) reads them
@@ -152,10 +193,11 @@ Item {
 
     // What the Configuration step adds to the drive, in one line (Write and Done pages)
     function eveConfigSummary() {
-        if (root.eveIsIsoImage)
-            return qsTr("Not applied (ISO image)")
         var c = root.eveConfig
         var parts = []
+        // An ISO takes everything except the installer options (see
+        // EveConfigurator): leave those out of the summary
+        var iso = root.eveIsIsoImage
         if (c.controllerUrl)                parts.push(qsTr("Controller %1").arg(c.controllerUrl))
         // c.hardware (OnLogic FR201) is chosen in the Platform list and shown
         // with the image, not here
@@ -185,13 +227,15 @@ Item {
         if (c.rootCertPath)                 parts.push(qsTr("Controller root certificate"))
         if (c.onboardCertPath)              parts.push(qsTr("Onboarding certificate"))
         if (c.authorizedKeys)               parts.push(qsTr("SSH key"))
-        if (c.installDisk)                  parts.push(qsTr("Install disk %1").arg(c.installDisk))
-        if (c.persistDisk)                  parts.push(qsTr("/persist disk %1").arg(c.persistDisk))
-        if (c.nukeDisks)                    parts.push(qsTr("Wipe %1").arg(c.nukeDisks))
-        if (c.softSerial)                   parts.push(qsTr("Soft serial %1").arg(c.softSerial))
-        if (c.console === "serial")         parts.push(qsTr("Serial console"))
-        if (c.console === "vga")            parts.push(qsTr("Screen console"))
-        if (c.rebootAfterInstall)           parts.push(qsTr("Reboot after install"))
+        if (!iso) {
+            if (c.installDisk)              parts.push(qsTr("Install disk %1").arg(c.installDisk))
+            if (c.persistDisk)              parts.push(qsTr("/persist disk %1").arg(c.persistDisk))
+            if (c.nukeDisks)                parts.push(qsTr("Wipe %1").arg(c.nukeDisks))
+            if (c.softSerial)               parts.push(qsTr("Soft serial %1").arg(c.softSerial))
+            if (c.console === "serial")     parts.push(qsTr("Serial console"))
+            if (c.console === "vga")        parts.push(qsTr("Screen console"))
+            if (c.rebootAfterInstall)       parts.push(qsTr("Reboot after install"))
+        }
         return parts.length > 0 ? parts.join(" · ") : qsTr("None")
     }
 
@@ -207,12 +251,14 @@ Item {
         if (c.rootCertPath)        names.push(qsTr("controller root certificate"))
         if (c.onboardCertPath)     names.push(qsTr("onboarding certificate"))
         if (c.authorizedKeys)      names.push(qsTr("SSH key"))
-        if (c.installDisk)         names.push(qsTr("install disk"))
-        if (c.persistDisk)         names.push(qsTr("/persist disk"))
-        if (c.nukeDisks)           names.push(qsTr("disks to wipe"))
-        if (c.softSerial)          names.push(qsTr("soft serial"))
-        if (c.console)             names.push(qsTr("console"))
-        if (c.rebootAfterInstall)  names.push(qsTr("reboot after install"))
+        if (!root.eveIsIsoImage) {
+            if (c.installDisk)         names.push(qsTr("install disk"))
+            if (c.persistDisk)         names.push(qsTr("/persist disk"))
+            if (c.nukeDisks)           names.push(qsTr("disks to wipe"))
+            if (c.softSerial)          names.push(qsTr("soft serial"))
+            if (c.console)             names.push(qsTr("console"))
+            if (c.rebootAfterInstall)  names.push(qsTr("reboot after install"))
+        }
         if (c.bootstrapConfigPath) names.push(qsTr("bootstrap config"))
         return names
     }
@@ -304,11 +350,6 @@ Item {
             writeAnotherMode = false
         }
 
-        // ISO images: skip the customization step — config cannot be applied to ISOs
-        if (next === stepEveCustomization && root.eveIsIsoImage) {
-            next = stepWriting
-        }
-
         markStepPermissible(next)
         forgetFinishedWrite(next)
         root.currentStep = next
@@ -319,11 +360,6 @@ Item {
     function previousStep() {
         if (root.currentStep <= 0) return
         var prev = root.currentStep - 1
-
-        // ISO images: skip back over the customization step
-        if (prev === stepEveCustomization && root.eveIsIsoImage) {
-            prev = stepStorageSelection
-        }
 
         forgetFinishedWrite(prev)
         root.currentStep = prev
@@ -343,6 +379,8 @@ Item {
         invalidateStepsFrom(stepStorageSelection)
         selectedStorageName = ""
         saveFilePath = ""
+        saveAsIso = false
+        eveRawSelection = null
         eveConfigured = false
     }
 

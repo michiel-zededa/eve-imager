@@ -339,28 +339,48 @@ WizardStepBase {
                   : qsTr("The image will be saved as a file, not written to a drive: %1").arg(root.wizardContainer.saveFilePath)
         }
 
+        // What the image needs, so the size limits in the list make sense
+        Text {
+            Layout.fillWidth: true
+            text: root.wizardContainer && root.driveImageSize > 0
+                  ? qsTr("The selected image takes %1 on the drive. Everything on the drive you choose will be erased.")
+                        .arg(root.imageWriter.formatSize(root.driveImageSize))
+                  : qsTr("Everything on the drive you choose will be erased.")
+            font.family: Style.fontFamily
+            font.pointSize: Style.fontSizeDescription
+            color: Style.muted
+            wrapMode: Text.WordWrap
+        }
+
         RowLayout {
             Layout.fillWidth: true
-            spacing: Style.spacingMedium
+            spacing: Style.spacingSmallPlus
 
-            // What the image needs, so the size limits in the list make sense
             Text {
                 Layout.fillWidth: true
-                text: root.wizardContainer && root.wizardContainer.eveImageSize > 0
-                      ? qsTr("The selected image takes %1 on the drive. Everything on the drive you choose will be erased.")
-                            .arg(root.imageWriter.formatSize(root.wizardContainer.eveImageSize))
-                      : qsTr("Everything on the drive you choose will be erased.")
+                text: qsTr("Or, instead of a drive:")
+                horizontalAlignment: Text.AlignRight
                 font.family: Style.fontFamily
                 font.pointSize: Style.fontSizeDescription
                 color: Style.muted
-                wrapMode: Text.WordWrap
             }
 
             ImButton {
                 id: saveAsFileButton
-                text: root.wizardContainer.saveToFile ? qsTr("Change file…") : qsTr("Save as image file…")
-                accessibleDescription: qsTr("Save the image, with your configuration, as a file instead of writing it to a drive. Use it for network installation or write it to a drive later.")
-                onClicked: root.chooseImageFile()
+                text: qsTr("Save as image file…")
+                accessibleDescription: qsTr("Save the image, with your configuration, as a file instead of writing it to a drive. It can be written to a drive later.")
+                onClicked: root.chooseImageFile(false)
+            }
+
+            // The release's installer ISO, which is what network (PXE)
+            // installation takes. Not for the FR201: its boot files are
+            // changed in the raw image.
+            ImButton {
+                id: saveAsIsoButton
+                visible: root.isoUrl().length > 0
+                text: qsTr("Save as ISO for network install…")
+                accessibleDescription: qsTr("Save the installer ISO of this release, with your configuration, for network (PXE) installation.")
+                onClicked: root.chooseImageFile(true)
             }
         }
     }
@@ -369,10 +389,26 @@ WizardStepBase {
     // ── Saving to an image file instead of a drive ─────────────────────────
     property string saveFileError: ""
 
-    // A name that says what is in the file
-    function suggestedImageFileName() {
+    // The size a drive needs. While the release's ISO is chosen for saving,
+    // the wizard's image size is the ISO's; a drive would get the raw image.
+    readonly property real driveImageSize: {
         var w = root.wizardContainer
-        var ext = w.eveIsIsoImage ? ".iso" : ".raw"
+        if (!w) return 0
+        return (w.saveAsIso && w.eveRawSelection) ? w.eveRawSelection.imageSize : w.eveImageSize
+    }
+
+    // The ISO of the selected release, if it has one besides the raw image
+    function isoUrl() {
+        var w = root.wizardContainer
+        if (w.useLocalImage || (w.eveConfig && w.eveConfig.hardware))
+            return ""
+        return w.eveIsoUrl
+    }
+
+    // A name that says what is in the file
+    function suggestedImageFileName(iso) {
+        var w = root.wizardContainer
+        var ext = (iso || (w.eveIsIsoImage && !w.saveAsIso)) ? ".iso" : ".raw"
         if (w.useLocalImage) {
             var base = w.eveLocalImagePath.split(/[\\/]/).pop().replace(/\.(raw|iso|img)(\.(zst|gz|xz))?$/i, "")
             return (base.length > 0 ? base : "eve") + "-configured" + ext
@@ -383,15 +419,19 @@ WizardStepBase {
         return name + ext
     }
 
-    function chooseImageFile() {
-        var name = root.suggestedImageFileName()
+    // iso: save the release's installer ISO instead of its raw image
+    function chooseImageFile(iso) {
+        var w = root.wizardContainer
+        var isIsoFile = iso || (w.eveIsIsoImage && !w.saveAsIso)
+        var name = root.suggestedImageFileName(iso)
         var folder = root.imageWriter.defaultSaveFolder()
-        var filter = root.wizardContainer.eveIsIsoImage ? qsTr("ISO images (*.iso);;All files (*)")
-                                                        : qsTr("Raw disk images (*.raw);;All files (*)")
+        var filter = isIsoFile ? qsTr("ISO images (*.iso);;All files (*)")
+                               : qsTr("Raw disk images (*.raw);;All files (*)")
+        root.pendingIso = iso
         if (root.imageWriter.nativeFileDialogAvailable()) {
             var path = root.imageWriter.getNativeSaveFileName(qsTr("Save the image as"), folder + "/" + name, filter)
             if (path)
-                root.useImageFile(path)
+                root.useImageFile(path, iso)
         } else {
             saveImageDialog.nameFilters = filter.split(";;")
             saveImageDialog.suggestedFilename = name
@@ -400,8 +440,15 @@ WizardStepBase {
         }
     }
 
-    function useImageFile(path) {
+    property bool pendingIso: false
+
+    function useImageFile(path, iso) {
         var w = root.wizardContainer
+        // Switch between the release's raw image and its ISO
+        if (iso)
+            w.setIsoVariant(true, w.eveIsoUrl, w.eveIsoSize)
+        else
+            w.setIsoVariant(false)
         // A name typed without an extension gets the one of the image
         var ext = w.eveIsIsoImage ? ".iso" : ".raw"
         var fileName = path.split(/[\\/]/).pop()
@@ -437,7 +484,7 @@ WizardStepBase {
             }
             s = decodeURIComponent(s)
             if (s.length > 0)
-                root.useImageFile(s)
+                root.useImageFile(s, root.pendingIso)
         }
     }
     
@@ -600,13 +647,13 @@ WizardStepBase {
     // True if a drive of this size (bytes) cannot hold the selected image.
     // Always false while the image size is not known (0).
     function isTooSmallForImage(deviceSize) {
-        var need = root.wizardContainer ? root.wizardContainer.eveImageSize : 0
+        var need = root.wizardContainer ? root.driveImageSize : 0
         var have = parseFloat(deviceSize)
         return need > 0 && have > 0 && have < need
     }
 
     function tooSmallText() {
-        return qsTr("Too small: the image needs %1").arg(imageWriter.formatSize(root.wizardContainer.eveImageSize))
+        return qsTr("Too small: the image needs %1").arg(imageWriter.formatSize(root.driveImageSize))
     }
 
     // Storage selection function
@@ -635,6 +682,7 @@ WizardStepBase {
             imageWriter.setDst(dstitem.device, dstitem.size)
         }
         root.wizardContainer.saveFilePath = ""
+        root.wizardContainer.setIsoVariant(false)
         root.saveFileError = ""
         selectedDeviceName = dstitem.description || dstitem.device
         root.wizardContainer.selectedStorageName = dstitem.description || dstitem.device
@@ -816,6 +864,7 @@ WizardStepBase {
         onConfirmed: {
             root.imageWriter.setDst(systemDriveConfirm.device, systemDriveConfirm.deviceSize)
             root.wizardContainer.saveFilePath = ""
+            root.wizardContainer.setIsoVariant(false)
             root.saveFileError = ""
             root.selectedDeviceName = systemDriveConfirm.driveName || systemDriveConfirm.device
             root.wizardContainer.selectedStorageName = systemDriveConfirm.driveName || systemDriveConfirm.device
