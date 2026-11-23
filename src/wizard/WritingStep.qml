@@ -254,6 +254,18 @@ WizardStepBase {
                               : qsTr("Writing erases everything on the storage device.")
         }
 
+        // For people who take the ISO to a network boot server: only when an
+        // installer ISO is saved as a file, never when writing a drive
+        ImBanner {
+            Layout.fillWidth: true
+            kind: "info"
+            visible: root.saving && root.wizardContainer.eveIsIsoImage
+                     && root.wizardContainer.saveVariant !== "nettar"
+                     && !root.isWriting && !root.isComplete && !root.hasFailed
+            text: qsTr("Using this ISO with EVE Netboot Installer? Copy it to its import folder and choose it in its boot menu. "
+                       + "Set the installation options there. Leave its Controller setting empty, or it replaces the controller you set here.")
+        }
+
         // Progress card
         ImCard {
             id: progressLayout

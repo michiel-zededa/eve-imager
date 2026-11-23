@@ -143,7 +143,7 @@ Build with CMake + Qt 6.9 or newer (MinGW kit) via the Qt Online Installer: `cma
    |---|---|
    | Raw disk image (`.raw`) | To write to a drive later: choose the file under _Use local image file_. As large as the drive image (8 GB for EVE-OS 17.0). |
    | Compressed raw image (`.raw.zst`) | The same, in a much smaller file (about 0.4 GB for EVE-OS 17.0). Compressing takes about a minute more. |
-   | Installer ISO (`.iso`) | For network (PXE) installation, for example with [eve-netboot-installer](https://github.com/michiel-zededa/eve-netboot-installer), for remote management consoles (virtual CD) and for virtual machines. |
+   | Installer ISO (`.iso`) | For network (PXE) installation with [EVE Netboot Installer](https://github.com/michiel-zededa/eve-netboot-installer) (see [Using the ISO with EVE Netboot Installer](#using-the-iso-with-eve-netboot-installer)), for remote management consoles (virtual CD) and for virtual machines. |
    | Network boot archive (`installer-net.tar`) | The installer ISO together with the boot loader files, for network (PXE) installation. |
 
    The ISO and the archive are the release's own files and are offered when the release has them; they do not take the installation options or the OnLogic FR201 setup. Nothing is erased when saving, and a file that could not be completed is removed again.
@@ -157,6 +157,40 @@ Build with CMake + Qt 6.9 or newer (MinGW kit) via the Qt Online Installer: `cma
 4. **Write** — Review the summary (image, storage, configuration) and click **Write**, then confirm that the drive may be erased. EVE Imager downloads the image (if not using a local file), streams it to the USB drive, and verifies the result. **Cancel write** stops the write and returns to the summary. When saving to a file the button reads **Save** and there is nothing to confirm.
 
 5. **Done** — The drive is ejected automatically (unless you turned that off under _App options_). Boot your target device from it, or choose **Write another** to write the same image to another drive.
+
+---
+
+## Using the ISO with EVE Netboot Installer
+
+[EVE Netboot Installer](https://github.com/michiel-zededa/eve-netboot-installer) installs EVE-OS on machines over the network (PXE), without a USB drive. An installer ISO saved by EVE Imager is the way to give those machines a device configuration: the network, WiFi, proxy and certificate settings travel inside the ISO. Its side of this is described in [Device configuration with EVE Imager](https://github.com/michiel-zededa/eve-netboot-installer#device-configuration-with-eve-imager).
+
+**Steps**
+
+1. In EVE Imager, choose the release on the first page.
+2. On the Storage step choose **Save as file…** → **Installer ISO (.iso)** and give the file a name that says which configuration it holds, for example `eve-17.0.1-site-amsterdam.iso`.
+3. Make the settings under **Configuration**, then **Save**.
+4. Copy the ISO into EVE Netboot Installer's import folder. On its VM appliance, upload it in the web management or copy it to its SMB share.
+5. Within a minute the ISO is in the boot menu under _Local installers_, with its file name. Choose it on the machine to install.
+
+**What is set where**
+
+| Setting | Where |
+|---|---|
+| Controller, network interfaces, WiFi, proxy and proxy CA certificates, controller root certificate, onboarding certificate and key, SSH key, bootstrap config | EVE Imager, **Configuration** — saved in the ISO |
+| Install disk, `/persist` disk, wipe disks, reboot after installation, soft serial, console | EVE Netboot Installer's boot menu, _Installation options..._ |
+
+**Leave the controller empty in EVE Netboot Installer.** If its _Controller_ setting has a value, the installer writes that value over the controller you set in EVE Imager, without a message. Leave it empty, or set it to the same controller. Where to find it:
+
+- on the VM appliance: _Installer defaults_ → _Controller_;
+- with Docker Compose: `EVE_DEFAULT_INSTALL_SERVER`;
+- for one machine: clear it in the boot menu under _Installation options..._; the menu then shows _Controller: from ISO_.
+
+**Good to know**
+
+- One ISO holds one configuration. Another site, network or proxy is another ISO and another entry in the boot menu.
+- A new EVE-OS release needs a new ISO from EVE Imager.
+- Everything in the ISO can be downloaded by anyone on the boot network, including the WiFi password and the onboarding key. Put it only on a boot network you trust with those.
+- Not yet confirmed on a real device: a network boot of an ISO whose configuration EVE Imager changed. It is expected to work, because nothing else in the ISO changes. Check the first machine before installing a batch.
 
 ---
 
