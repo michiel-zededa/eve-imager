@@ -171,12 +171,13 @@ Item {
         wifiSsid:           "",
         wifiPassword:       "",
         proxyEnabled:       false,
+        proxyMethod:        "address", // how the device finds the proxy: address | wpad | pacUrl | pacFile
         proxyAddress:       "",       // host:port
         proxyExceptions:    "",
         proxyPacUrl:        "",
         proxyPacFilePath:   "",
-        proxyInspects:      false,    // the proxy intercepts TLS
-        proxyCertPaths:     [],       // proxy CA certificates
+        proxyInspects:      false,    // encrypted traffic is inspected (by a proxy or a firewall)
+        proxyCertPaths:     [],       // CA certificates of whatever inspects the traffic
         installDisk:        "",
         persistDisk:        "",
         nukeDisks:          "",
@@ -224,13 +225,15 @@ Item {
             }
             if (c.wifiSsid)                 parts.push(qsTr("WiFi %1").arg(c.wifiSsid))
             if (c.proxyEnabled) {
-                var p = c.proxyAddress ? qsTr("Proxy %1").arg(c.proxyAddress)
-                      : (c.proxyPacUrl || c.proxyPacFilePath) ? qsTr("Proxy from PAC") : qsTr("Proxy")
-                var n = c.proxyInspects ? (c.proxyCertPaths || []).length : 0
-                if (n > 0)
-                    p += " " + (n === 1 ? qsTr("with CA certificate") : qsTr("with %1 CA certificates").arg(n))
+                var m = c.proxyMethod || "address"
+                var p = m === "wpad" ? qsTr("Proxy by automatic discovery")
+                      : m === "pacUrl" || m === "pacFile" ? qsTr("Proxy by PAC script")
+                      : c.proxyAddress ? qsTr("Proxy %1").arg(c.proxyAddress) : qsTr("Proxy")
                 parts.push(p)
             }
+            var n = c.proxyInspects ? (c.proxyCertPaths || []).length : 0
+            if (n > 0)
+                parts.push(n === 1 ? qsTr("Inspection CA certificate") : qsTr("%1 inspection CA certificates").arg(n))
         }
         if (c.rootCertPath)                 parts.push(qsTr("Controller root certificate"))
         if (c.onboardCertPath)              parts.push(qsTr("Onboarding certificate"))
@@ -254,8 +257,11 @@ Item {
         var names = []
         if ((c.interfaces || []).some(function(f) { return f.ifName }) && !c.bootstrapConfigPath)
             names.push(qsTr("network interfaces"))
-        if (c.proxyEnabled && (c.proxyExceptions || c.proxyPacUrl || c.proxyPacFilePath) && !c.bootstrapConfigPath)
-            names.push(qsTr("proxy details"))
+        // (another way of finding the proxy than its address is shown in the Simple view itself)
+        if (c.proxyEnabled && (c.proxyMethod || "address") === "address" && c.proxyExceptions && !c.bootstrapConfigPath)
+            names.push(qsTr("proxy exceptions"))
+        if (c.proxyInspects && (c.proxyCertPaths || []).length > 1 && !c.bootstrapConfigPath)
+            names.push(qsTr("more inspection certificates"))
         if (c.rootCertPath)        names.push(qsTr("controller root certificate"))
         if (c.onboardCertPath)     names.push(qsTr("onboarding certificate"))
         if (c.authorizedKeys)      names.push(qsTr("SSH key"))

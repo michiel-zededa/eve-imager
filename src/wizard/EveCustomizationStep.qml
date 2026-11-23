@@ -39,6 +39,8 @@ WizardStepBase {
     // A bootstrap config from the controller replaces the network settings
     // An installer ISO takes the configuration, but not the installer options
     readonly property bool isIso: wizardContainer.eveIsIsoImage
+    // How the device finds the proxy: "address" | "wpad" | "pacUrl" | "pacFile"
+    readonly property string proxyMethod: cfg.proxyMethod || "address"
     readonly property bool bootstrapActive: cfg.bootstrapConfigPath.length > 0
     // FR201 is a Compute Module 4 board: arm64 only. A local file is not checked.
     // Message from the last check of the settings; "" if they are fine
@@ -198,15 +200,19 @@ WizardStepBase {
     }
 
     function proxySummary() {
-        if (!root.cfg.proxyEnabled)
-            return qsTr("No proxy")
+        if (!root.cfg.proxyEnabled && !root.cfg.proxyInspects)
+            return qsTr("No proxy, no inspection")
         var parts = []
-        if (root.cfg.proxyAddress) parts.push(root.cfg.proxyAddress)
-        else if (root.cfg.proxyPacFilePath || root.cfg.proxyPacUrl) parts.push(qsTr("PAC"))
-        if (root.cfg.proxyInspects && root.cfg.proxyCertPaths.length > 0)
-            parts.push(root.cfg.proxyCertPaths.length === 1 ? qsTr("CA certificate")
-                                                            : qsTr("%1 CA certificates").arg(root.cfg.proxyCertPaths.length))
-        return parts.length > 0 ? parts.join(" · ") : qsTr("On, not filled in")
+        if (root.cfg.proxyEnabled) {
+            if (root.proxyMethod === "wpad") parts.push(qsTr("proxy by automatic discovery"))
+            else if (root.proxyMethod === "pacUrl") parts.push(root.cfg.proxyPacUrl ? qsTr("proxy by PAC script") : qsTr("PAC URL not filled in"))
+            else if (root.proxyMethod === "pacFile") parts.push(root.cfg.proxyPacFilePath ? qsTr("proxy by PAC file") : qsTr("PAC file not chosen"))
+            else parts.push(root.cfg.proxyAddress || qsTr("proxy not filled in"))
+        }
+        if (root.cfg.proxyInspects)
+            parts.push(root.cfg.proxyCertPaths.length === 0 ? qsTr("inspection: no certificate yet")
+                                                            : qsTr("inspection"))
+        return parts.join(" · ")
     }
 
     function installationSummary() {
@@ -383,21 +389,50 @@ WizardStepBase {
     }
 
     // "The proxy inspects encrypted traffic" and its certificates
-    component ProxyInspection: ColumnLayout {
-        id: proxyInspection
-        property bool allowSeveral: false
+    // Inspection of encrypted traffic is its own setting: a proxy can do it,
+    // but so can a firewall that the device is never told about.
+    component InspectionSwitchRow: RowLayout {
+        id: inspectionSwitchRow
+        property bool large: false
         Layout.fillWidth: true
-        spacing: Style.spacingSmall
-
-        ImCheckBox {
+        spacing: Style.spacingSmallPlus
+        ColumnLayout {
             Layout.fillWidth: true
-            text: qsTr("The proxy inspects encrypted traffic")
+            spacing: Style.spacingXXSmall
+            Text {
+                text: inspectionSwitchRow.large ? qsTr("My network inspects encrypted traffic")
+                                                : qsTr("Encrypted traffic is inspected")
+                font.family: Style.fontFamily
+                font.pointSize: Style.fontSizeFormLabel
+                font.weight: inspectionSwitchRow.large ? Style.fontWeightSemiBold : Font.Normal
+                color: Style.text
+                Layout.fillWidth: true
+            }
+            Text {
+                text: qsTr("Also called TLS or SSL inspection: a firewall or proxy opens secure (HTTPS) traffic to check it. Your network team knows whether this is done.")
+                font.family: Style.fontFamily
+                font.pointSize: Style.fontSizeDescription
+                color: Style.muted
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+            }
+        }
+        ImSwitch {
+            accessibleName: qsTr("My network inspects encrypted traffic")
             checked: root.cfg.proxyInspects
             onToggled: root.setCfg("proxyInspects", checked)
         }
+    }
+
+    component InspectionCertificates: ColumnLayout {
+        id: inspectionCerts
+        property bool allowSeveral: false
+        Layout.fillWidth: true
+        spacing: Style.spacingSmall
+        visible: root.cfg.proxyInspects
+
         Text {
-            visible: root.cfg.proxyInspects
-            text: qsTr("The device then has to trust the proxy's certificate. Ask your network team for the proxy CA certificate (a .pem or .crt file).")
+            text: qsTr("The device has to trust the certificate of whatever inspects the traffic, or it cannot reach the controller. Ask your network team for the inspection CA certificate (a .pem or .crt file).")
             font.family: Style.fontFamily
             font.pointSize: Style.fontSizeDescription
             color: Style.muted
@@ -413,7 +448,7 @@ WizardStepBase {
                 required property int index
                 readonly property var info: root.certDetail(modelData)
                 Layout.fillWidth: true
-                label: index === 0 ? qsTr("Proxy CA certificate") : ""
+                label: index === 0 ? qsTr("Inspection CA certificate") : ""
                 path: modelData
                 detail: info.text
                 detailKind: info.kind
@@ -427,10 +462,10 @@ WizardStepBase {
 
         ImFileRow {
             id: addCertRow
-            visible: root.cfg.proxyInspects && (root.cfg.proxyCertPaths.length === 0 || proxyInspection.allowSeveral)
+            visible: root.cfg.proxyCertPaths.length === 0 || inspectionCerts.allowSeveral
             Layout.fillWidth: true
-            label: root.cfg.proxyCertPaths.length === 0 ? qsTr("Proxy CA certificate") : qsTr("Another certificate")
-            onChooseRequested: root.pickFile(qsTr("Choose the proxy CA certificate"), root.certFilter, function(path) {
+            label: root.cfg.proxyCertPaths.length === 0 ? qsTr("Inspection CA certificate") : qsTr("Another certificate")
+            onChooseRequested: root.pickFile(qsTr("Choose the inspection CA certificate"), root.certFilter, function(path) {
                 var list = root.cfg.proxyCertPaths.slice()
                 if (list.indexOf(path) < 0)
                     list.push(path)
@@ -529,8 +564,32 @@ WizardStepBase {
                 enabled: !root.bootstrapActive
                 opacity: enabled ? 1.0 : 0.55
                 ProxySwitchRow { large: true }
-                ProxyAddressField { visible: root.cfg.proxyEnabled }
-                ProxyInspection { visible: root.cfg.proxyEnabled }
+                ProxyAddressField { visible: root.cfg.proxyEnabled && root.proxyMethod === "address" }
+                // Set up another way in Advanced: say so instead of asking for an address
+                Text {
+                    visible: root.cfg.proxyEnabled && root.proxyMethod !== "address"
+                    text: (root.proxyMethod === "wpad" ? qsTr("The device finds the proxy by automatic discovery (WPAD).")
+                                                       : qsTr("The device finds the proxy through a PAC script."))
+                          + " <a href=\"advanced\">" + qsTr("Change in Advanced") + "</a>"
+                    textFormat: Text.StyledText
+                    linkColor: Style.accentText
+                    onLinkActivated: root.wizardContainer.setEveConfigMode("advanced")
+                    font.family: Style.fontFamily
+                    font.pointSize: Style.fontSizeDescription
+                    color: Style.muted
+                    wrapMode: Text.WordWrap
+                    Layout.fillWidth: true
+                    HoverHandler { cursorShape: parent.hoveredLink ? Qt.PointingHandCursor : Qt.ArrowCursor }
+                }
+            }
+
+            ImCard {
+                Layout.fillWidth: true
+                spacing: Style.spacingSmallPlus
+                enabled: !root.bootstrapActive
+                opacity: enabled ? 1.0 : 0.55
+                InspectionSwitchRow { large: true }
+                InspectionCertificates {}
             }
         }
     }
@@ -554,10 +613,11 @@ WizardStepBase {
                     readonly property var info: root.certDetail(root.cfg.rootCertPath)
                     Layout.fillWidth: true
                     label: qsTr("Controller root certificate")
-                    emptyText: qsTr("Only for controllers signed by a private CA")
+                    emptyText: qsTr("Not needed for ZEDEDA cloud")
                     path: root.cfg.rootCertPath
-                    detail: info.text
-                    detailKind: info.kind
+                    detail: path.length > 0 ? info.text
+                          : qsTr("Leave empty for zedcloud.zededa.net and the other ZEDEDA clusters. Only a controller you host yourself, with a certificate from your own certificate authority, needs this.")
+                    detailKind: path.length > 0 ? info.kind : ""
                     onChooseRequested: root.pickFile(qsTr("Choose the controller root certificate"), root.certFilter,
                                                      function(path) { root.setCfg("rootCertPath", path) })
                     onCleared: root.setCfg("rootCertPath", "")
@@ -567,10 +627,11 @@ WizardStepBase {
                     Layout.fillWidth: true
                     Layout.alignment: Qt.AlignTop
                     label: qsTr("Onboarding certificate")
-                    emptyText: qsTr("Default from the image")
+                    emptyText: qsTr("The one in the image")
                     path: root.cfg.onboardCertPath
-                    detail: info.text
-                    detailKind: info.kind
+                    detail: path.length > 0 ? info.text
+                          : qsTr("Leave empty unless your organisation has its own onboarding certificate. The one in the image works for any number of devices: the controller tells them apart by their serial number.")
+                    detailKind: path.length > 0 ? info.kind : ""
                     onChooseRequested: root.pickFile(qsTr("Choose the onboarding certificate"), root.certFilter,
                                                      function(path) { root.setCfg("onboardCertPath", path) })
                     onCleared: root.setCfg("onboardCertPath", "")
@@ -579,8 +640,9 @@ WizardStepBase {
                     Layout.fillWidth: true
                     Layout.alignment: Qt.AlignTop
                     label: qsTr("Onboarding key")
-                    emptyText: qsTr("Default from the image")
+                    emptyText: qsTr("The one in the image")
                     path: root.cfg.onboardKeyPath
+                    detail: qsTr("The key that belongs to the onboarding certificate: choose both, or neither.")
                     onChooseRequested: root.pickFile(qsTr("Choose the onboarding key"),
                                                      qsTr("Keys (*.pem *.key);;All files (*)"),
                                                      function(path) { root.setCfg("onboardKeyPath", path) })
@@ -893,11 +955,11 @@ WizardStepBase {
             ImSection {
                 Layout.fillWidth: true
                 enabled: !root.bootstrapActive
-                title: qsTr("Proxy and certificates")
+                title: qsTr("Proxy and traffic inspection")
                 summary: root.bootstrapActive ? qsTr("From the bootstrap config") : root.proxySummary()
-                badge: root.bootstrapActive || !root.cfg.proxyEnabled ? ""
-                       : root.badge(root.countSet([root.cfg.proxyAddress, root.cfg.proxyExceptions,
-                                                   root.cfg.proxyPacUrl || root.cfg.proxyPacFilePath,
+                badge: root.bootstrapActive ? ""
+                       : root.badge(root.countSet([root.cfg.proxyEnabled,
+                                                   root.cfg.proxyEnabled && root.proxyMethod === "address" && root.cfg.proxyExceptions,
                                                    root.cfg.proxyInspects && root.cfg.proxyCertPaths.length > 0]))
 
                 ProxySwitchRow {}
@@ -907,9 +969,33 @@ WizardStepBase {
                     spacing: Style.spacingSmallPlus
                     visible: root.cfg.proxyEnabled
 
+                    // One way of finding the proxy: EVE-OS uses a PAC script
+                    // whenever it has one, so the ways are not combined
+                    Field {
+                        label: qsTr("The device finds the proxy by")
+                        hint: root.proxyMethod === "wpad"
+                              ? qsTr("The device asks the network where the proxy is (WPAD, through DHCP and DNS). Nothing to fill in; the network has to offer it.")
+                            : root.proxyMethod === "pacUrl"
+                              ? qsTr("The device downloads a PAC script, which names the proxy for each destination.")
+                            : root.proxyMethod === "pacFile"
+                              ? qsTr("The PAC script is put on the device, so nothing has to be downloaded.")
+                              : qsTr("The usual way: your network team gives you a host name and port.")
+                        ImComboBox {
+                            id: proxyMethodCombo
+                            Layout.fillWidth: true
+                            readonly property var methods: ["address", "wpad", "pacUrl", "pacFile"]
+                            model: [qsTr("Its address"), qsTr("Automatic discovery (WPAD)"),
+                                    qsTr("A PAC script at a URL"), qsTr("A PAC script from a file")]
+                            currentIndex: Math.max(0, methods.indexOf(root.proxyMethod))
+                            Accessible.name: qsTr("How the device finds the proxy")
+                            onActivated: function(i) { root.setCfg("proxyMethod", methods[i]) }
+                        }
+                    }
+
                     RowLayout {
                         Layout.fillWidth: true
                         spacing: Style.spacingMedium
+                        visible: root.proxyMethod === "address"
                         ProxyAddressField {
                             Layout.alignment: Qt.AlignTop
                             Layout.preferredWidth: 150
@@ -930,31 +1016,36 @@ WizardStepBase {
                         }
                     }
                     Field {
-                        Layout.alignment: Qt.AlignTop
-                        enabled: root.cfg.proxyPacFilePath.length === 0
-                        label: qsTr("Auto-config (PAC) URL")
-                        hint: qsTr("Use this, or a PAC file, when the proxy is found through a PAC script.")
+                        visible: root.proxyMethod === "pacUrl"
+                        label: qsTr("PAC script URL")
                         ImTextField {
                             Layout.fillWidth: true
                             placeholderText: qsTr("e.g. http://wpad.example.com/proxy.pac")
                             inputMethodHints: Qt.ImhNoPredictiveText | Qt.ImhUrlCharactersOnly
-                            Accessible.name: qsTr("PAC URL")
+                            Accessible.name: qsTr("PAC script URL")
                             text: root.cfg.proxyPacUrl
                             onTextChanged: if (text !== root.cfg.proxyPacUrl) root.setCfg("proxyPacUrl", text)
                         }
                     }
                     ImFileRow {
+                        visible: root.proxyMethod === "pacFile"
                         Layout.fillWidth: true
-                        Layout.alignment: Qt.AlignTop
                         label: qsTr("PAC file")
                         path: root.cfg.proxyPacFilePath
-                        detail: path.length > 0 ? qsTr("Its contents are written to the drive, in place of the URL.") : ""
                         onChooseRequested: root.pickFile(qsTr("Choose the PAC file"), qsTr("PAC files (*.pac *.dat *.js);;All files (*)"),
                                                          function(path) { root.setCfg("proxyPacFilePath", path) })
                         onCleared: root.setCfg("proxyPacFilePath", "")
                     }
-                    ProxyInspection { allowSeveral: true }
                 }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    implicitHeight: 1
+                    color: Style.border
+                }
+
+                InspectionSwitchRow {}
+                InspectionCertificates { allowSeveral: true }
             }
 
             ImSection {

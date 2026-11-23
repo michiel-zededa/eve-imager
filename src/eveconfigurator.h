@@ -72,12 +72,22 @@ public:
      *   wifiSsid, wifiPassword
      *
      *   proxyEnabled         bool
+     *   proxyMethod          how the device finds the proxy; only the fields of
+     *                        that way are used:
+     *                          "address"  proxyAddress, proxyExceptions
+     *                          "wpad"     automatic discovery, nothing else
+     *                          "pacUrl"   proxyPacUrl
+     *                          "pacFile"  proxyPacFilePath
+     *                        Left out: whichever of them is filled in.
      *   proxyAddress         "proxy.example.com:3128" (a scheme is accepted)
      *   proxyExceptions      comma-separated hosts / domains / networks
      *   proxyPacUrl          URL of a PAC (proxy auto-config) file
      *   proxyPacFilePath     file: PAC file to embed
-     *   proxyInspects        bool: the proxy intercepts TLS
-     *   proxyCertPaths       list of files: proxy CA certificates
+     *   proxyInspects        bool: encrypted traffic is inspected on the network
+     *                        (by the proxy above, or by a firewall or transparent
+     *                        proxy without any proxy being set); independent of
+     *                        proxyEnabled
+     *   proxyCertPaths       list of files: CA certificates of whatever inspects
      *
      *   installDisk          e.g. "nvme0n1"
      *   persistDisk          e.g. "sda" or "sdb,sdc"

@@ -17,8 +17,8 @@ EVE Imager downloads EVE-OS releases directly from GitHub, lets you configure de
 - **Multi-format support** — handles `.installer.raw`, `.installer.raw.zst` (zstd-compressed), `.installer.img` (gzip-compressed, used by older EVE ≤12.x releases), and `.installer.iso`; compressed formats are decompressed on the fly while writing; when a release offers both `.installer.raw` and `.installer.raw.zst`, the smaller `.raw.zst` download is used
 - **Drive size check** — a compressed image unpacks to much more than its download size (the EVE-OS 17.0 installer images are ~400 MB to download but 8 GiB on the drive, so they need a 16 GB USB stick). The real size is read from the first bytes of the file when you pick a release; drives that are too small are marked in the storage list and cannot be selected
 - **Device configuration** — optionally pre-configure the device before writing, in a **Simple** or an **Advanced** view (an installer ISO takes everything except the installation options):
-  - _Simple_: controller (the ZEDEDA clusters are suggested, any host name can be typed), WiFi, and _My network uses a proxy_ with the proxy's CA certificate for proxies that inspect encrypted traffic
-  - _Advanced_ adds: controller root certificate and onboarding certificate/key, network interfaces (DHCP or static, NTP servers, VLANs, management or not), proxy exceptions and PAC, several proxy CA certificates, install / `/persist` / wipe disks, soft serial number, console, auto-reboot, an SSH key for the debug console, and a bootstrap config exported by the controller
+  - _Simple_: controller (the ZEDEDA clusters are suggested, any host name can be typed), WiFi, _My network uses a proxy_, and _My network inspects encrypted traffic_ with the inspection CA certificate (for a proxy or a firewall that opens HTTPS traffic)
+  - _Advanced_ adds: controller root certificate and onboarding certificate/key, network interfaces (DHCP or static, NTP servers, VLANs, management or not), a proxy found by automatic discovery (WPAD) or a PAC script, the do-not-proxy list, several inspection CA certificates, install / `/persist` / wipe disks, soft serial number, console, auto-reboot, an SSH key for the debug console, and a bootstrap config exported by the controller
 - **Save as a file** — instead of writing to a drive, save the image with your configuration: as a raw image (`.raw`, or compressed `.raw.zst`) to write later, or as the release's installer ISO or network boot archive (`installer-net.tar`) for network (PXE) installation
 - **Local image support** — bypass the GitHub release browser and write an image file you already have instead: `.raw`, `.img`, `.raw.zst` or `.iso`, including one saved earlier with this app
 - **Write + verify** — streams the download directly to the USB device and verifies the written data afterwards; the Write page shows the percentage, the amount written and the current stage
@@ -35,7 +35,7 @@ EVE Imager downloads EVE-OS releases directly from GitHub, lets you configure de
 |---|---|
 | **1. Version** — pick a release, or a local image file | **2. Storage** — drives that are too small or read-only cannot be selected |
 | ![Version step](doc/screenshots/version.png) | ![Storage step](doc/screenshots/storage.png) |
-| **3. Configuration, Simple** — controller, WiFi and proxy | **3. Configuration, Advanced** — every setting, one section each |
+| **3. Configuration, Simple** — controller, WiFi, proxy and traffic inspection | **3. Configuration, Advanced** — every setting, one section each |
 | ![Configuration step, Simple view](doc/screenshots/configuration.png) | ![Configuration step, Advanced view](doc/screenshots/configuration-advanced.png) |
 | **4. Write** — progress, amount written and stage | |
 | ![Write step](doc/screenshots/write.png) | |
@@ -149,7 +149,7 @@ Build with CMake + Qt 6.9 or newer (MinGW kit) via the Qt Online Installer: `cma
    The ISO and the archive are the release's own files and are offered when the release has them; they do not take the installation options or the OnLogic FR201 setup. Nothing is erased when saving, and a file that could not be completed is removed again.
 
 3. **Configuration** _(optional)_ — The switch at the top right chooses the view; the app remembers it.
-   - **Simple** asks only where the device connects: the controller (`zedcloud.zededa.net` by default), a WiFi network if there is no cable, and whether the site uses a proxy. For a proxy that inspects encrypted traffic, tick _The proxy inspects encrypted traffic_ and choose the proxy's CA certificate.
+   - **Simple** asks only where the device connects: the controller (`zedcloud.zededa.net` by default), a WiFi network if there is no cable, whether the site uses a proxy, and whether the network inspects encrypted traffic. The last two are separate: a proxy is an address the device sends its traffic to; inspection can be done by that proxy or by a firewall the device is never told about, and then there is only a certificate to choose.
    - **Advanced** shows every setting in sections that open and close; a closed section says what is set in it.
    - Settings made in Advanced stay in effect when you switch back to Simple; Simple lists them so that nothing is applied unseen.
    - **Next** checks the settings (addresses, certificate files, sizes) and says what to correct. Anything left empty uses the EVE-OS default. For an installer ISO the Installation section is switched off (see [Configuration details](#configuration-details)).
@@ -176,7 +176,7 @@ Build with CMake + Qt 6.9 or newer (MinGW kit) via the Qt Online Installer: `cma
 
 | Setting | Where |
 |---|---|
-| Controller, network interfaces, WiFi, proxy and proxy CA certificates, controller root certificate, onboarding certificate and key, SSH key, bootstrap config | EVE Imager, **Configuration** — saved in the ISO |
+| Controller, network interfaces, WiFi, proxy and inspection CA certificates, controller root certificate, onboarding certificate and key, SSH key, bootstrap config | EVE Imager, **Configuration** — saved in the ISO |
 | Install disk, `/persist` disk, wipe disks, reboot after installation, soft serial, console | EVE Netboot Installer's boot menu, _Installation options..._ |
 
 **Leave the controller empty in EVE Netboot Installer.** If its _Controller_ setting has a value, the installer writes that value over the controller you set in EVE Imager, without a message. Leave it empty, or set it to the same controller. Where to find it:
@@ -220,21 +220,22 @@ After writing the image, EVE Imager puts these files on the `CONFIG` FAT partiti
 | File | Setting |
 |---|---|
 | `server` | Controller host name. Suggested: `zedcloud.zededa.net` (default), `zedcontrol.gmwtus.zededa.net`, `zedcloud.pacteu.zededa.net`; any host name can be typed. |
-| `root-certificate.pem` | _Controller root certificate_ — only for a controller whose certificate is signed by a private CA. |
-| `onboard.cert.pem`, `onboard.key.pem` | _Onboarding certificate_ and _key_, in place of the ones in the image. |
+| `root-certificate.pem` | _Controller root certificate_ — leave empty for the ZEDEDA clusters. Only a controller you host yourself, whose certificate is signed by your own certificate authority, needs it. |
+| `onboard.cert.pem`, `onboard.key.pem` | _Onboarding certificate_ and _key_, in place of the ones in the image. Leave empty unless your organisation has its own. The one in the image works for any number of devices: the device registers with it and sends its serial number, and the controller matches that to the node you created. |
 | `authorized_keys` | _SSH public key_ for the debug console. |
 
 ### Network, WiFi and proxy
 
 | File | Setting |
 |---|---|
-| `DevicePortConfig/override.json` | Network interfaces (DHCP or static address, gateway, DNS, NTP, VLANs, management or not), WiFi (SSID and WPA2 password), proxy (address, _do not proxy_ list, PAC URL or PAC file) and the proxy CA certificates. Not written when none of these is set: EVE-OS then uses DHCP on its wired ports. |
+| `DevicePortConfig/override.json` | Network interfaces (DHCP or static address, gateway, DNS, NTP, VLANs, management or not), WiFi (SSID and WPA2 password), proxy (address, _do not proxy_ list, PAC URL or PAC file, or automatic discovery) and the inspection CA certificates. Not written when none of these is set: EVE-OS then uses DHCP on its wired ports. |
 | `bootstrap-config.pb` | A _bootstrap config_ exported by the controller. EVE-OS then ignores `override.json`, so the Network interfaces, WiFi and Proxy sections are switched off while one is chosen. |
 
 Notes:
 
-- **Proxies that inspect traffic.** A proxy that decrypts HTTPS presents its own certificates, so the device must trust the proxy's CA before it can reach the controller. The CA certificate (PEM or DER; several are possible in Advanced) goes into the network configuration, the same place the controller would put it. The app shows the certificate's subject and expiry date when you choose the file, and refuses a file that is not a certificate.
-- **Simple view and ports.** WiFi or proxy settings made in the Simple view apply to `eth0` (and `wlan0` for WiFi). If the device's uplink is another port, list it under _Network interfaces_ in Advanced.
+- **How the device finds the proxy.** One way is written, because EVE-OS uses a PAC script whenever it has one: the proxy's address (with an optional _do not proxy_ list), automatic discovery (WPAD: the device asks the network through DHCP and DNS), a PAC script at a URL, or a PAC file that is put on the device.
+- **Traffic inspection (TLS or SSL inspection).** A proxy or firewall that opens HTTPS traffic to check it presents its own certificates, so the device must trust its CA before it can reach the controller. This is independent of the proxy setting: a firewall or transparent proxy inspects without the device being given any address, and then the certificate is all there is to configure. The CA certificate (PEM or DER; several are possible in Advanced) goes into the network configuration, the same place the controller would put it. The app shows the certificate's subject and expiry date when you choose the file, and refuses a file that is not a certificate.
+- **Simple view and ports.** WiFi, proxy and inspection settings made in the Simple view apply to `eth0` (and `wlan0` for WiFi). If the device's uplink is another port, list it under _Network interfaces_ in Advanced.
 - The network configuration only gets the device online for onboarding; once the device is onboarded, the controller's network configuration takes over.
 - EVE-OS limits `override.json` to 16 KB. The app tells you when certificates make it larger.
 

@@ -132,69 +132,91 @@ struct ProxySettings {
     QString exceptions;
     QString pacUrl;
     QByteArray pacFile;          // already base64
+    bool autoDiscover = false;   // WPAD: the device looks the PAC script up itself
     QJsonArray certs;            // base64 of PEM text, as Go's [][]byte
 };
 
 ProxySettings readProxy(const QVariantMap &config)
 {
     ProxySettings p;
-    if (!config.value(QStringLiteral("proxyEnabled")).toBool())
+    // Two separate things. A proxy is somewhere the device has to send its
+    // traffic to. Inspection (TLS interception) is done by such a proxy or,
+    // without the device being told, by a firewall or transparent proxy on
+    // the way; then there is only a CA certificate to trust.
+    const bool proxyOn = config.value(QStringLiteral("proxyEnabled")).toBool();
+    const bool inspected = config.value(QStringLiteral("proxyInspects")).toBool();
+    if (!proxyOn && !inspected)
         return p;
 
-    const QString address = str(config, "proxyAddress");
-    if (!address.isEmpty()) {
-        // "host:port", with or without a scheme in front
-        const QUrl url = QUrl::fromUserInput(address.contains(QLatin1String("://")) ? address
-                                                                                    : QStringLiteral("http://") + address);
-        const QString host = url.host();
-        const int port = url.port(-1);
-        if (!url.isValid() || host.isEmpty())
-            fail(tr("Proxy address: \"%1\" is not a host name and port, for example proxy.example.com:3128.").arg(address));
-        if (port < 1 || port > 65535)
-            fail(tr("Proxy address: \"%1\" needs a port number, for example proxy.example.com:3128.").arg(address));
-        for (int type : { ProxyTypeHttps, ProxyTypeHttp }) {
-            QJsonObject entry;
-            entry[QStringLiteral("Server")] = host;
-            entry[QStringLiteral("Port")] = port;
-            entry[QStringLiteral("Type")] = type;
-            p.proxies.append(entry);
+    if (proxyOn) {
+        // How the device finds the proxy. EVE-OS uses a PAC script whenever it
+        // has one and the address only otherwise, so exactly one way is
+        // written. Without proxyMethod: whatever is filled in.
+        QString method = str(config, "proxyMethod");
+        if (method.isEmpty())
+            method = !str(config, "proxyPacFilePath").isEmpty() ? QStringLiteral("pacFile")
+                   : !str(config, "proxyPacUrl").isEmpty()      ? QStringLiteral("pacUrl")
+                                                                : QStringLiteral("address");
+
+        if (method == QLatin1String("address")) {
+            const QString address = str(config, "proxyAddress");
+            if (address.isEmpty())
+                fail(tr("The proxy is switched on but has no address, for example proxy.example.com:3128."));
+            // "host:port", with or without a scheme in front
+            const QUrl url = QUrl::fromUserInput(address.contains(QLatin1String("://")) ? address
+                                                                                        : QStringLiteral("http://") + address);
+            const QString host = url.host();
+            const int port = url.port(-1);
+            if (!url.isValid() || host.isEmpty())
+                fail(tr("Proxy address: \"%1\" is not a host name and port, for example proxy.example.com:3128.").arg(address));
+            if (port < 1 || port > 65535)
+                fail(tr("Proxy address: \"%1\" needs a port number, for example proxy.example.com:3128.").arg(address));
+            for (int type : { ProxyTypeHttps, ProxyTypeHttp }) {
+                QJsonObject entry;
+                entry[QStringLiteral("Server")] = host;
+                entry[QStringLiteral("Port")] = port;
+                entry[QStringLiteral("Type")] = type;
+                p.proxies.append(entry);
+            }
+            p.exceptions = splitList(str(config, "proxyExceptions")).join(QLatin1Char(','));
+        } else if (method == QLatin1String("wpad")) {
+            // The device asks the network (DHCP domain name, then DNS) for the script
+            p.autoDiscover = true;
+        } else if (method == QLatin1String("pacUrl")) {
+            p.pacUrl = str(config, "proxyPacUrl");
+            const QUrl url(p.pacUrl);
+            if (p.pacUrl.isEmpty())
+                fail(tr("The proxy is set to use a PAC script from a URL, but no URL is filled in."));
+            if (!url.isValid() || url.host().isEmpty()
+                || (url.scheme() != QLatin1String("http") && url.scheme() != QLatin1String("https")))
+                fail(tr("PAC URL: \"%1\" must start with http:// or https://.").arg(p.pacUrl));
+        } else if (method == QLatin1String("pacFile")) {
+            const QString pacPath = str(config, "proxyPacFilePath");
+            if (pacPath.isEmpty())
+                fail(tr("The proxy is set to use a PAC file, but no file was chosen."));
+            QFile f(pacPath);
+            if (!f.open(QIODevice::ReadOnly))
+                fail(tr("Cannot read the PAC file %1: %2").arg(pacPath, f.errorString()));
+            const QByteArray pac = f.readAll();
+            if (pac.trimmed().isEmpty())
+                fail(tr("The PAC file %1 is empty.").arg(pacPath));
+            p.pacFile = pac.toBase64();
+        } else {
+            fail(tr("Unknown proxy setting \"%1\".").arg(method));
         }
     }
 
-    p.exceptions = splitList(str(config, "proxyExceptions")).join(QLatin1Char(','));
-
-    const QString pacPath = str(config, "proxyPacFilePath");
-    p.pacUrl = str(config, "proxyPacUrl");
-    if (!pacPath.isEmpty()) {
-        QFile f(pacPath);
-        if (!f.open(QIODevice::ReadOnly))
-            fail(tr("Cannot read the PAC file %1: %2").arg(pacPath, f.errorString()));
-        const QByteArray pac = f.readAll();
-        if (pac.trimmed().isEmpty())
-            fail(tr("The PAC file %1 is empty.").arg(pacPath));
-        p.pacFile = pac.toBase64();
-        p.pacUrl.clear();        // the embedded file takes the place of the URL
-    } else if (!p.pacUrl.isEmpty()) {
-        const QUrl url(p.pacUrl);
-        if (!url.isValid() || url.host().isEmpty()
-            || (url.scheme() != QLatin1String("http") && url.scheme() != QLatin1String("https")))
-            fail(tr("PAC URL: \"%1\" must start with http:// or https://.").arg(p.pacUrl));
-    }
-
-    if (config.value(QStringLiteral("proxyInspects")).toBool()) {
+    if (inspected) {
         const QStringList paths = config.value(QStringLiteral("proxyCertPaths")).toStringList();
         for (const QString &path : paths) {
             if (path.trimmed().isEmpty())
                 continue;
-            const QByteArray pem = EveConfigurator::readCertificateAsPem(path.trimmed(), tr("proxy CA certificate"));
+            const QByteArray pem = EveConfigurator::readCertificateAsPem(path.trimmed(), tr("inspection CA certificate"));
             p.certs.append(QString::fromLatin1(pem.toBase64()));
         }
         if (p.certs.isEmpty())
-            fail(tr("The proxy is set to inspect encrypted traffic, but no proxy CA certificate was chosen."));
+            fail(tr("Traffic inspection is switched on, but no CA certificate was chosen."));
     }
-
-    if (p.proxies.isEmpty() && p.pacFile.isEmpty() && p.pacUrl.isEmpty() && p.certs.isEmpty())
-        fail(tr("The proxy is switched on but has no address, PAC file or certificate."));
 
     p.active = true;
     return p;
@@ -216,6 +238,8 @@ void addProxy(QJsonObject &port, const ProxySettings &p, bool withLegacyCertKey,
     } else if (!p.pacUrl.isEmpty()) {
         port[QStringLiteral("NetworkProxyEnable")] = true;
         port[QStringLiteral("NetworkProxyURL")] = p.pacUrl;
+    } else if (p.autoDiscover) {
+        port[QStringLiteral("NetworkProxyEnable")] = true;
     }
     if (!p.certs.isEmpty() && !*certsPlaced) {
         *certsPlaced = true;
@@ -244,7 +268,7 @@ QByteArray buildOverrideJsonImpl(const QVariantMap &config, bool withLegacyCertK
     if (interfaces.isEmpty() && !proxy.active && wifiSsid.isEmpty())
         return QByteArray();
 
-    // Proxy or WiFi without any interface chosen: keep the wired port that
+    // Proxy, inspection or WiFi without any interface chosen: keep the wired port that
     // EVE-OS would use on its own, so the device is not left with WiFi only.
     if (interfaces.isEmpty()) {
         QVariantMap eth0;
@@ -831,6 +855,7 @@ bool EveConfigurator::hasAnything(const QVariantMap &config)
             return true;
     }
     if (config.value(QStringLiteral("proxyEnabled")).toBool()
+        || config.value(QStringLiteral("proxyInspects")).toBool()
         || config.value(QStringLiteral("rebootAfterInstall")).toBool())
         return true;
     const QVariantList interfaces = config.value(QStringLiteral("interfaces")).toList();
